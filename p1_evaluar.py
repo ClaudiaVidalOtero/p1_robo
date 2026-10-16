@@ -84,7 +84,13 @@ import time
 
 import numpy as np
 
-from p1_robobo_env import RUTA_CONFIG, RoboboSeguidorEnv, cargar_config, dif_ang
+from p1_robobo_env import (
+    RUTA_CONFIG,
+    RUTA_MODELOS,
+    RoboboSeguidorEnv,
+    cargar_config,
+    dif_ang,
+)
 
 RUTA_LOGS = 'p1_logs'
 
@@ -248,7 +254,7 @@ def politica_de(args, env):
         return (lambda obs: env.action_space.sample()), 'aleatorio'
 
     from stable_baselines3 import PPO, SAC
-    ruta = args.modelo or f'p1_modelo_{args.algoritmo}_s{args.semilla}'
+    ruta = args.modelo or os.path.join(RUTA_MODELOS, f'p1_modelo_{args.algoritmo}_s{args.semilla}')
     ruta = ruta.removesuffix('.zip')
     if not os.path.exists(ruta + '.zip'):
         raise SystemExit(f'No existe {ruta}.zip')
@@ -495,7 +501,7 @@ def main():
     a.add_argument('--algoritmo', choices=['ppo', 'sac', 'aleatorio'], required=True)
     a.add_argument('--semilla', type=int, default=0)
     a.add_argument('--modelo', default=None,
-                   help='ruta del .zip (por defecto p1_modelo_<algoritmo>_s<semilla>)')
+                   help='ruta del .zip (por defecto modelos/p1_modelo_<algoritmo>_s<semilla>)')
     a.add_argument('--etiqueta', default=None,
                    help='nombre para los archivos de registro (por defecto, el del modelo)')
     a.add_argument('--configs', nargs='+', choices=sorted(CONFIGURACIONES),
@@ -511,7 +517,7 @@ def main():
     if args.resumen:
         etiqueta = args.etiqueta or (
             'aleatorio' if args.algoritmo == 'aleatorio'
-            else os.path.basename(args.modelo or f'p1_modelo_{args.algoritmo}_s{args.semilla}')
+            else os.path.basename(args.modelo or os.path.join(RUTA_MODELOS, f'p1_modelo_{args.algoritmo}_s{args.semilla}'))
             .replace('.zip', '').replace('p1_modelo_', ''))
         resumen(etiqueta)
         return

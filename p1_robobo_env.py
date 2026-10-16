@@ -97,9 +97,9 @@ REQUISITOS
    (el módulo de cámara no hace falta para blobs; se cargan sólo los necesarios.
    Con RESET_DIRECTO=false el reinicio va por el puente y hace falta además
    el módulo 'sim': modules:="['blob','sim']")
-3. Configuración calibrada en p1_config.json. Se regenera con
+3. Configuración calibrada en config/p1_config.json. Se regenera con
        python3 -c "from p1_robobo_env import importar_calibracion as i; i()"
-   a partir de calibracion.json (medidas de p1_calibrar.py).
+   a partir de config/calibracion.json (medidas de p1_calibrar.py).
 
 Sin módulo sim (robot real, o pruebas sin simulador) el entorno funciona con
 usar_simulador=False: entonces el reposicionamiento entre episodios lo hace
@@ -110,7 +110,7 @@ ESTE ARCHIVO
 ----------------------------------------------------------------------
 Contiene `RoboboSeguidorEnv` y utilidades de configuración/calibración. El
 entrenamiento y la evaluación están en p1_entrenar.py. Las constantes que
-dependen de la calibración se leen de p1_config.json, no están en el código.
+dependen de la calibración se leen de config/p1_config.json, no están en el código.
 """
 
 import contextlib
@@ -184,8 +184,9 @@ ESPERA_MAX_S = 3.0
 # Pulsos de giro del barrido de posx de p1_calibrar.py.
 W_GIRO, GIRO_S = 0.3, 0.3
 
-RUTA_CONFIG = 'p1_config.json'
-RUTA_CALIBRACION = 'calibracion.json'
+RUTA_CONFIG = os.path.join('config', 'p1_config.json')
+RUTA_CALIBRACION = os.path.join('config', 'calibracion.json')
+RUTA_MODELOS = 'modelos'
 
 
 # =====================================================================

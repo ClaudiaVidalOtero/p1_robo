@@ -72,6 +72,7 @@ import numpy as np
 
 from p1_robobo_env import (
     RUTA_CONFIG,
+    RUTA_MODELOS,
     RoboboSeguidorEnv,
     cargar_config,
     importar_calibracion,
@@ -113,7 +114,7 @@ HIPER_PPO = {
 
 
 def ruta_modelo(args):
-    return f'p1_modelo_{args.algoritmo}_s{args.semilla}'
+    return os.path.join(RUTA_MODELOS, f'p1_modelo_{args.algoritmo}_s{args.semilla}')
 
 
 def construir_algoritmo(args, env):
@@ -538,7 +539,7 @@ def main():
     modo.add_argument('--graficas', action='store_true',
                       help='curvas de aprendizaje desde p1_logs/monitor_*.csv')
     modo.add_argument('--importar-calibracion', action='store_true',
-                      help='regenera p1_config.json desde calibracion.json')
+                      help='regenera config/p1_config.json desde config/calibracion.json')
 
     p.add_argument('--algoritmo', choices=['ppo', 'sac'], default='sac')
     p.add_argument('--pasos', type=int, default=20_000,

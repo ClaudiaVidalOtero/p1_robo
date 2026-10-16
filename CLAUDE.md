@@ -3,7 +3,7 @@
 Asignatura Robótica Inteligente Aplicada (Grado IA, UDC, 2026/27). Práctica 1, por parejas.
 Un Robobo **seguidor** aprende por refuerzo (acciones continuas) a circular detrás de un Robobo **guía** (pelota verde en la parte trasera) por el anillo exterior del mundo **"Follow City"** de RoboboSim. Se entrena en simulación y la política se ejecuta en el robot real (lab 0.0 FIC) **sin reentrenar**.
 
-Fuente de verdad: `RIA_P1_enunciado_simple (2).pdf` (versión simplificada, sustituye a la anterior).
+Fuente de verdad: `docs/RIA_P1_enunciado.pdf` (versión simplificada, sustituye a la anterior).
 
 **Entrega: domingo 18/10/2026, campus online (.zip).** Defensa oral: hay que conocer y saber modificar el código sin IA.
 
@@ -45,19 +45,25 @@ Mantener la separación en la banda objetivo, sin chocar, sin perder al guía de
 - Recompensa: cada término separado, con su coeficiente numérico y la magnitud observable de la que depende.
 - Detección: `smartphone/set_active_color_blobs` (green). **Un solo blob verde** por imagen; la ciudad real tiene otros elementos verdes.
 - Periodo de control: decisión de diseño, declararlo. Blobs a 5 Hz en tiempo real.
-- Reinicio por conexión directa a RoboboSim (`RESET_DIRECTO`, ver CAMBIOS.txt nº 6): el puente se lanza **solo con `['blob']`**, porque la conexión del módulo `sim` del puente se caía.
+- Reinicio por conexión directa a RoboboSim (`RESET_DIRECTO`, ver docs/CAMBIOS.txt nº 6): el puente se lanza **solo con `['blob']`**, porque la conexión del módulo `sim` del puente se caía.
 
 ## Ficheros
 
 ```
-p1_robobo_env.py    # Entorno Gymnasium + calibrar()/comprobar()
-p1_calibrar.py      # Caracterización del sensor
-p1_entrenar.py      # Entrenamiento / evaluación / gráficas SB3
-p1_evaluar.py       # Evaluador del anexo B (verdad del terreno por conexión directa a RoboboSim)
-p1_config.json      # Configuración calibrada
-calibracion.json    # Medidas crudas de p1_calibrar.py
-CAMBIOS.txt         # Registro de todos los cambios (qué/dónde/por qué/efecto)
+README.md                 # Estructura e instrucciones de reproducción
+p1_robobo_env.py          # Entorno Gymnasium + calibrar()/comprobar()/importar_calibracion()
+p1_calibrar.py            # Caracterización del sensor
+p1_entrenar.py            # Entrenamiento / evaluación / gráficas SB3
+p1_evaluar.py             # Evaluador del anexo B (verdad del terreno por conexión directa a RoboboSim)
+config/p1_config.json     # Configuración calibrada (RUTA_CONFIG)
+config/calibracion.json   # Medidas crudas de p1_calibrar.py (RUTA_CALIBRACION)
+modelos/                  # p1_modelo_<alg>_s<semilla>.zip (RUTA_MODELOS)
+docs/CAMBIOS.txt          # Registro de todos los cambios (qué/dónde/por qué/efecto)
+docs/memoria.txt          # Notas para la memoria
+p1_logs/, p1_checkpoints/ # Generados al ejecutar (CSV, Monitor, TensorBoard, checkpoints)
 ```
+
+Los scripts se ejecutan desde la raíz del proyecto (rutas relativas).
 
 ## Entregables (.zip)
 
@@ -134,4 +140,4 @@ python3 p1_evaluar.py --algoritmo ppo --semilla N --resumen   # tablas desde los
 
 - Los errores típicos de asistentes (p. ej. observación obsoleta en `step()`) no generan mensajes y solo se ven porque la política no aprende: verificar con pruebas.
 - Los resultados exigen ejecuciones reales. Un resultado negativo bien diagnosticado, con evidencia, es válido.
-- Todo cambio de código/config se anota en `CAMBIOS.txt`.
+- Todo cambio de código/config se anota en `docs/CAMBIOS.txt`.

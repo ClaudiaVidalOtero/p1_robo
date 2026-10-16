@@ -399,3 +399,24 @@ Formato: [fecha] Título
   - Efecto: solo figuras. memoria.txt nuevo: puntos para la memoria.
             OJO: la referencia aleatoria (-15,7) es del 14/10 con la banda
             antigua; repetir --aleatorio con la configuración actual.
+
+
+-----------------------------------------------------------------
+[2026-10-16] 16. Reorganización en directorios para la entrega
+-----------------------------------------------------------------
+  - Qué:    los cuatro scripts siguen en la raíz (se importan entre sí);
+            el resto se agrupa:
+              config/   p1_config.json, p1_config_ppo_s0.json,
+                        calibracion.json, calibracion_invalida_2026-10-14.json
+              modelos/  p1_modelo_*.zip
+              docs/     CAMBIOS.txt, memoria.txt, RIA_P1_enunciado.pdf
+            README.md nuevo con la estructura y la reproducción.
+            Fuera del repositorio: __pycache__/ y practica1_RIA.zip (entrega
+            antigua del 14/10, movida a antiguo_v1/, ignorado por git).
+  - Dónde:  p1_robobo_env.py: RUTA_CONFIG, RUTA_CALIBRACION y RUTA_MODELOS
+            (nueva); p1_calibrar.py: --json por defecto RUTA_CALIBRACION;
+            p1_entrenar.py: ruta_modelo(); p1_evaluar.py: --modelo por
+            defecto; .gitignore; CLAUDE.md.
+  - Por qué: que el .zip de la entrega sea fácil de leer.
+  - Efecto: ninguno en el comportamiento. Los scripts se siguen lanzando
+            desde la raíz del proyecto; p1_logs/ y p1_checkpoints/ no cambian.

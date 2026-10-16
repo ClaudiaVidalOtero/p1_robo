@@ -4,14 +4,14 @@ Calibración MANUAL de la pelota verde (sólo size y posx).
 
 Cada ejecución mide UNA distancia real, que das en el comando, y termina:
 
-    python3 p1_calibrar_manual.py --distancia 0.25
+    python3 p1_calibrar.py --distancia 0.25
 
 El robot NO avanza ni retrocede (tilt fijo, 90 por defecto):
 
   1. Pones la pelota a esa distancia y pulsas Enter ('v' = ver el size en
      vivo mientras la colocas).
   2. El script toma N lecturas en reposo, te dice el size (mediana, std,
-     x, y) y lo guarda en calibracion.json ligado a esa distancia.
+     x, y) y lo guarda en config/calibracion.json ligado a esa distancia.
   3. Barrido de posx (ver abajo). Fin. Para otra distancia, vuelves a
      lanzar el comando.
 
@@ -21,7 +21,7 @@ perder la pelota (o --max-pulsos), vuelve al centro y registra la x en
 cada pulso. --sin-barrido lo omite; --solo-barrido se salta la medida de
 size y hace sólo el barrido.
 
-El JSON (--json, por defecto calibracion.json) es una LISTA de medidas.
+El JSON (--json, por defecto config/calibracion.json) es una LISTA de medidas.
 Cada ejecución AÑADE una entrada al final, sin borrar las anteriores:
 
     [
@@ -45,10 +45,10 @@ conserva como primera entrada de la lista.
     python3 -c "from p1_robobo_env import importar_calibracion as i; i()"
 
 Ejemplos:
-    python3 p1_calibrar_manual.py --distancia 0.2          # size + barrido
-    python3 p1_calibrar_manual.py --distancia 0.375 --sin-barrido
-    python3 p1_calibrar_manual.py --distancia 0.375 --solo-barrido
-    python3 p1_calibrar_manual.py --distancia 0.5 --tilt 90 --n-medidas 30
+    python3 p1_calibrar.py --distancia 0.2          # size + barrido
+    python3 p1_calibrar.py --distancia 0.375 --sin-barrido
+    python3 p1_calibrar.py --distancia 0.375 --solo-barrido
+    python3 p1_calibrar.py --distancia 0.5 --tilt 90 --n-medidas 30
 
 Nodo puente necesario:
     ros2 run robobo_ros2 robobo_container --ros-args \
@@ -78,6 +78,7 @@ from p1_robobo_env import (
     NS_BASE,
     NS_SIM,
     NS_SMARTPHONE,
+    RUTA_CALIBRACION,
     W_GIRO,
     BlobArray,
     MoveTilt,
@@ -130,7 +131,7 @@ def cargar_previas(json_path):
 
 def calibrar_manual(distancia, tilt=TILT_DEFECTO, n_medidas=N_MEDIDAS,
                     max_pulsos=MAX_PULSOS, tamanos=True, barrido=True,
-                    json_path='calibracion.json'):
+                    json_path=RUTA_CALIBRACION):
     if not HAY_INTERFACES_BLOB:
         raise RuntimeError('No se encuentran las interfaces de blobs '
                            '(robobo_ros2_interfaces). Revisa los imports.')
@@ -439,7 +440,7 @@ if __name__ == '__main__':
                    help='medir sólo el size, sin barrido de posx')
     g.add_argument('--solo-barrido', action='store_true',
                    help='hacer sólo el barrido (sin medir size)')
-    ap.add_argument('--json', default='calibracion.json')
+    ap.add_argument('--json', default=RUTA_CALIBRACION)
     a = ap.parse_args()
     calibrar_manual(a.distancia, tilt=a.tilt, n_medidas=a.n_medidas,
                     max_pulsos=a.max_pulsos,
