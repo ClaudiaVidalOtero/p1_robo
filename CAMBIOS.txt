@@ -1,0 +1,401 @@
+REGISTRO DE CAMBIOS — RIA P1 (seguimiento del guía en RoboboSim)
+=================================================================
+
+Cada entrada indica QUÉ se cambió, DÓNDE y POR QUÉ. Los cambios los hizo
+el asistente de IA (Claude Code) a petición del equipo; sirve también como
+base para la declaración de uso de IA y para la memoria (apartados 5.2 y 8).
+
+Formato: [fecha] Título
+  - Qué:    descripción del cambio
+  - Dónde:  ficheros / funciones / claves de configuración
+  - Por qué: motivo y evidencia
+  - Efecto: consecuencias (comparabilidad, memoria, cómo deshacerlo)
+
+
+-----------------------------------------------------------------
+[2026-10-14] 1. reset() pasa `options` a Gymnasium
+-----------------------------------------------------------------
+  - Qué:    super().reset(seed=seed) -> super().reset(seed=seed, options=options)
+  - Dónde:  p1_robobo_env.py, RoboboSeguidorEnv.reset()
+  - Por qué: aviso de Pylance ("options" no se usa). El parámetro es parte
+            obligatoria de la firma de Gymnasium, así que no se puede quitar;
+            se reenvía a la clase base.
+  - Efecto: ninguno en el comportamiento.
+
+
+-----------------------------------------------------------------
+[2026-10-14] 2. Limpieza con ruff (58 avisos -> 0)
+-----------------------------------------------------------------
+  - Qué:
+      * 43 '...'.format(...) convertidos a f-strings; líneas muy largas
+        resultantes partidas en varias.
+      * 4 bloques de import ordenados.
+      * Eliminada la variable `clave` (se calculaba y no se usaba).
+      * try/except Exception: pass -> with contextlib.suppress(Exception):
+        en las paradas/cierres "best-effort" (mismo comportamiento, intención
+        explícita y comentada).
+      * HIPER_SAC / HIPER_PPO: dict(...) -> literales {...} (mismos valores).
+      * CSV por paso de resumen() abierto con `with` (+ nullcontext si no
+        se pide CSV): el fichero se cierra aunque un episodio falle.
+      * `metadata` del entorno anotado como ClassVar.
+      * Eliminada la función _slug() (código muerto, nadie la llamaba).
+  - Dónde:  p1_robobo_env.py, p1_calibrar.py, p1_entrenar.py
+  - Por qué: petición de pasar el linter; ninguna regla cambia la lógica.
+  - Efecto: ninguno en resultados. NO se ha aplicado `ruff format`
+            (cambiaría el estilo de todo el código, p. ej. comillas).
+
+
+-----------------------------------------------------------------
+[2026-10-14] 3. Intervalo mínimo entre reinicios y espera tras reiniciar
+-----------------------------------------------------------------
+  - Qué:    antes de reiniciar la escena se espera hasta que pasen
+            RESET_INTERVALO_MIN_S (4,0 s) desde el reinicio anterior; tras
+            reiniciar se espera RESET_ESPERA_S (1,5 s; antes 0,5 s fijo en
+            el código). Mensaje de error más claro si el reinicio falla.
+            Aviso por pantalla si un episodio termina en el paso 1 o 2.
+  - Dónde:  p1_robobo_env.py: _reiniciar_escena(), reset(), step();
+            p1_config.json: RESET_ESPERA_S, RESET_INTERVALO_MIN_S
+  - Por qué: el log del puente mostraba 3 reinicios en ~4 s y después
+            "Broken pipe" / "Connection to remote host was lost". Primera
+            hipótesis: reinicios encadenados saturaban RoboboSim. (Luego se
+            vio que no era la causa principal, ver entrada 6, pero la
+            protección se mantiene: es barata y evita ráfagas de reinicios.)
+  - Efecto: cada reinicio cuesta algo más de tiempo real (entra en los
+            "segundos por paso" medidos, que incluyen reinicios).
+
+
+-----------------------------------------------------------------
+[2026-10-14] 4. Errata en el registro por paso
+-----------------------------------------------------------------
+  - Qué:    "GUIÍA PERDIDO" -> "GUÍA PERDIDO"
+  - Dónde:  p1_robobo_env.py, step() (salida de --detalle)
+  - Por qué: errata visible en la salida.
+  - Efecto: sólo texto.
+
+
+-----------------------------------------------------------------
+[2026-10-14] 5. "Choque (encima)" sólo si la pelota estaba centrada
+-----------------------------------------------------------------
+  - Qué:    la desaparición de la pelota tras verse cerca (size >= SIZE_CERCA)
+            sólo cuenta como choque si además el último posx estaba centrado
+            (|posx| < POSX_CERCA_MAX = 0,6). Si estaba en un borde de la
+            imagen se interpreta como salida por el LATERAL al girar: no
+            termina el episodio y cuenta para "guía perdido" si no vuelve.
+  - Dónde:  p1_robobo_env.py: step() (demasiado_cerca), estado _ultimo_posx
+            en __init__() y reset(); p1_config.json: POSX_CERCA_MAX
+  - Por qué: en la línea base aleatoria, el episodio 2 terminó en
+            "CHOQUE (encima)" con el último blob en posx -0,86 (borde
+            izquierdo) y size 162: la pelota salió por el lado al girar, no
+            por abajo. Era un falso choque que penalizaba con -10 un giro,
+            no una colisión.
+  - Efecto: CAMBIA la terminación y la recompensa -> los modelos y CSV
+            anteriores (p1_modelo_sac_s0.zip, pasos_aleatorio_s0.csv...) ya
+            no son comparables; hay que repetir la línea base aleatoria.
+            Sirve como variante para la tabla del apartado 8 (choque por
+            size frente a choque por size + posx).
+
+
+-----------------------------------------------------------------
+[2026-10-14] 6. Reinicio de la escena por conexión propia (RESET_DIRECTO)
+-----------------------------------------------------------------
+  - Qué:    el entorno reinicia RoboboSim abriendo una conexión nueva y corta
+            para cada reinicio (conectar -> RESET-SIM -> desconectar, ~1 s,
+            hasta 3 intentos), en vez de usar el servicio
+            sim/reset_simulation del puente. El puente se lanza ahora sólo
+            con modules:="['blob']".
+  - Dónde:  p1_robobo_env.py: _reset_directo() (nuevo), _reiniciar_escena(),
+            __init__() (no exige el módulo sim si RESET_DIRECTO);
+            p1_config.json: RESET_DIRECTO (true), SIM_IP
+  - Por qué: diagnóstico realizado:
+      * La conexión que cae es la del módulo sim (puerto 50505); los blobs
+        siguen llegando hasta el final del episodio.
+      * El corte es brusco ("Connection to remote host was lost": RoboboSim
+        cierra el socket sin cierre ordenado).
+      * La librería robobosim no reconecta: tras el corte, la siguiente
+        llamada hace sys.exit("Establish connection before sending a
+        message"), por eso el servicio de reset no respondía y en un caso
+        el puente entero terminó.
+      * NO es la frecuencia de reinicios (con 4 s de intervalo siguió
+        pasando), NI un choque físico (los robots no se tocaron), NI el
+        ordenador/Docker: un cliente aparte desde el mismo contenedor
+        aguantó reinicios sin perder la conexión (pruebas: un reinicio con
+        15 s de vigilancia; dos reinicios separados 10 s con callbacks de
+        posición como el puente; tres reinicios con _reset_directo()).
+      * La causa exacta está dentro de RoboboSim / el nodo sim del puente
+        (código de terceros); se evita en lugar de corregirla.
+  - Efecto:
+      * DECLARAR EN LA MEMORIA (5.2): el reinicio de la escena (gestión
+        del episodio) no pasa por ROS 2. Sensores y actuadores del
+        seguidor siguen yendo exclusivamente por ROS 2; la observación no
+        cambia.
+      * Sin módulo sim en el puente no llega sim/robot_location: el campo
+        pose_sim del info queda vacío (no afecta al entrenamiento). El
+        evaluador del anexo B necesitará leer las poses también por
+        conexión directa.
+      * Para volver al comportamiento anterior: "RESET_DIRECTO": false en
+        p1_config.json y lanzar el puente con modules:="['blob','sim']".
+
+
+-----------------------------------------------------------------
+[2026-10-14] 7. Choque y ambigüedad cerca del guía (R_CHOQUE, blob.y)
+-----------------------------------------------------------------
+  - Qué:
+      a) R_CHOQUE 10 -> 20.
+      b) Nueva componente de la observación posy = y_blob / IMG_ALTO
+         (OBS_Y = true): la observación pasa de [posx, size] a
+         [posx, size, posy] (+ ir si OBS_IR).
+      c) Nuevo criterio de choque: pelota visible pero cortada por el borde
+         inferior (y >= Y_CHOQUE). Mientras está cortada tampoco cuenta como
+         "en banda". Y_CHOQUE sale de la calibración (punto medio entre la y
+         a 0,20 m y a 0,25 m); hasta medirla vale null y el criterio no se
+         aplica.
+      d) p1_calibrar.py guarda la y de cada lectura y también las lecturas en
+         reposo (etapa 'reposo'); con --sin-barrido antes no se guardaba
+         nada y ahora sí. importar_calibracion() usa 'centro' y 'reposo'
+         para el size y calcula Y_CHOQUE.
+      e) --detalle muestra la y y marca "CHOQUE (cortada)".
+  - Dónde:  p1_robobo_env.py: CONFIG_POR_DEFECTO, __init__ (espacio de
+            observación), _observacion(), _pelota_cortada() (nueva),
+            _recompensa(), step(), importar_calibracion(); p1_calibrar.py;
+            p1_config.json: R_CHOQUE, IMG_ALTO, OBS_Y, Y_CHOQUE
+  - Por qué:
+      a) Con R_CHOQUE = 10, chocar costaba -1 - 10 = -11 y perder al guía
+         12 x (-1) - 5 = -17: la política aprendería a preferir chocar.
+         Con 20, chocar (-21) es peor que perderse (-17).
+      b/c) calibracion.json (size en el centro, mediana):
+             0,20 m -> 81   0,25 -> 190   0,30 -> 185   0,40 -> 88
+             0,50 -> 52     0,75 -> 20    1,0 -> 12
+         A 0,20 m (distancia de colisión del anexo B) la pelota sale
+         cortada por abajo y su size (81) es casi el de 0,40 m (88) y está
+         DENTRO de la banda [51,8, 207]: la recompensa premiaba estar
+         pegado y la política no podía distinguirlo con [posx, size].
+         SIZE_CHOQUE = 323,4 es una extrapolación de size = K/d² y nunca se
+         alcanza (máximo observado ~243), así que el choque por size no
+         funcionaba. La altura de la pelota en la imagen (y) sí cambia al
+         cortarse y es un sensor del seguidor que existe en el robot real.
+  - Efecto:
+      * CAMBIA observación y recompensa: modelos anteriores (dimensión 2)
+        no se pueden cargar con OBS_Y = true; para evaluarlos, OBS_Y = false.
+        El PPO lanzado hoy con la recompensa anterior queda como variante
+        "antes del arreglo" para la tabla del apartado 8.
+      * PENDIENTE: medir y a 0,20 / 0,25 / 0,30 / 0,40 m con p1_calibrar.py
+        y volver a importar la calibración; sin eso c) no actúa (b sí).
+      * La memoria debe declarar la observación como [posx, size, posy].
+
+
+-----------------------------------------------------------------
+[2026-10-14] 8. Medidas de y inválidas apartadas; calibración restaurada
+-----------------------------------------------------------------
+  - Qué:    las 4 medidas nuevas (0,20 / 0,25 / 0,30 / 0,40 m, etapa
+            'reposo') se movieron de calibracion.json a
+            calibracion_invalida_2026-10-14.json y se volvió a importar la
+            calibración.
+  - Dónde:  calibracion.json, calibracion_invalida_2026-10-14.json,
+            p1_config.json (SIZE_*, SIZE_MAX)
+  - Por qué: las 4 distancias dieron exactamente las mismas 20 lecturas
+            (size 46, x 51, y 72), que corresponden a ~0,50 m: el seguidor
+            no se había recolocado entre medidas. Al importarlas cambiaron el
+            ajuste (K 12,938 -> 11,995) y la banda ([51,8, 207] ->
+            [48,0, 191,9]). No dicen nada sobre la y a 0,20 m.
+  - Efecto: config de nuevo como antes (K = 12,938, banda [51,8, 207],
+            SIZE_MAX 330). Y_CHOQUE sigue en null: hay que repetir la medida
+            de y colocando de verdad el robot a cada distancia.
+
+
+-----------------------------------------------------------------
+[2026-10-14] 9. CLAUDE.md actualizado al enunciado simplificado
+-----------------------------------------------------------------
+  - Qué:    CLAUDE.md reescrito según RIA_P1_enunciado_simple.pdf y el
+            aviso del profesor. No cambia código ni configuración.
+  - Dónde:  CLAUDE.md
+  - Por qué: el enunciado nuevo cambia la entrega (domingo 18/10), el
+            anexo B (3 configuraciones de 120 s; banda 0,20-0,45 m medida a
+            la pelota, 0,08 m detrás del guía; colisión < 0,12 m; perdido
+            > 0,90 m o > 3 s sin ver la pelota; salirse del carril ya NO es
+            fallo; nueva métrica de desviación angular), obliga a probar SAC
+            y PPO en cada configuración y prohíbe usar el carril en la
+            recompensa (no es inferible). El CLAUDE.md anterior además
+            indicaba lanzar el puente con ['blob','sim'], contradiciendo el
+            cambio 6.
+  - Efecto: PENDIENTE revisar en el código (no hecho todavía):
+      * Banda y choque de p1_config.json calibrados para 0,25-0,50 m y
+        0,20 m entre centros; con el anexo nuevo la referencia es la
+        pelota (0,20-0,45 m, choque 0,12 m).
+      * PASOS_MAX = 300 (60 s); la evaluación es de 120 s.
+      * PERDIDO_MAX = 12 pasos (2,4 s) frente a los 3 s del anexo B.
+      * Y_CHOQUE (pelota cortada a 0,20 m) cae ahora DENTRO de la banda.
+      * El PPO semilla 0 en curso (guía en modo variable) vale como
+        entrenamiento para C3 con la banda antigua.
+
+
+-----------------------------------------------------------------
+[2026-10-14] 10. Evaluador del anexo B (p1_evaluar.py)
+-----------------------------------------------------------------
+  - Qué:    nuevo p1_evaluar.py. Ejecuta la política (determinista, o
+            aleatoria como línea base) con el entorno de siempre y la mide
+            con la verdad del terreno: C1/C2/C3 de 120 s, colisión < 0,12 m,
+            perdido > 0,90 m o > 3 s sin ver la pelota, banda 0,20-0,45 m,
+            desviación angular. Escribe un CSV por paso y configuración
+            (p1_logs/eval_<etiqueta>_<C>.csv) y calcula las 4 métricas
+            siempre desde esos CSV (--resumen las rehace sin simulador).
+            Compara además la desviación real con la posx del blob
+            (correlación) como comprobación de la calibración (anexo B.1).
+  - Dónde:  p1_evaluar.py (nuevo); CLAUDE.md (comandos)
+  - Por qué: el protocolo exige verdad del terreno sólo en el evaluador.
+            Diagnóstico con la librería robobosim (sólo lectura, 14/10):
+      * En Follow City sólo hay un ROBOT (id 0 = seguidor). El guía es el
+        OBJETO 'PATHFOLLOWROBOBO' y la pelota el objeto 'CYLINDERMIDBALL';
+        por eso el segundo contenedor robot_1 no publicaba pose.
+      * Pelota a 118,1 mm del centro del guía (el anexo dice 0,08 m): se
+        mide a la posición REAL de la pelota, que es la referencia que
+        define el anexo. Declararlo en la memoria.
+      * Unidades mm, plano (x, z), rumbo = rotation.y; avance = (sin, cos)
+        (el desplazamiento del guía coincide con su rotation.y).
+      * Frecuencias: pelota/guía ~22 Hz, seguidor ~5 Hz (huecos 0,27 s).
+        En cada paso se toma la última pose sin esperar, para no alargar
+        el periodo de control respecto al entrenamiento; error máximo
+        ~v*0,27 s (~4 cm a 0,15 m/s). Declararlo.
+      * El callback de objetos de robobosim 1.5.1 no funciona (clave mal
+        escrita en la librería): la frescura se detecta por identidad del
+        diccionario, que la librería reemplaza en cada mensaje.
+      * Separación inicial tras reiniciar: ~0,645 m (fuera de banda, dentro
+        de 0,90 m).
+  - Decisiones a declarar:
+      * Las terminaciones propias del entorno (choque/perdido por blob) se
+        registran (columnas entorno_choque/entorno_perdido) pero NO cortan
+        el episodio: el fin lo deciden sólo los criterios del protocolo.
+      * El tiempo de 120 s y los 3 s sin ver se miden en tiempo real.
+      * La configuración del guía se pone a mano en RoboboSim; el script
+        espera a Enter antes de cada configuración.
+  - Efecto: no cambia el entorno ni el entrenamiento. Pruebas hechas:
+            fórmulas de separación/desviación con casos conocidos, métricas
+            y --resumen con CSV sintéticos, lectura de poses en directo.
+            PENDIENTE: primera ejecución real y comprobar que la correlación
+            desviación<->posx sale positiva (convenio de signos).
+
+
+-----------------------------------------------------------------
+[2026-10-14] 11. Copias intermedias del modelo durante el entrenamiento
+-----------------------------------------------------------------
+  - Qué:    a) CheckpointCallback de SB3: copia del modelo cada 2000 pasos
+            (opción --checkpoint N; 0 = desactivado) en
+            p1_checkpoints/<alg>_s<semilla>/<alg>_s<semilla>_<pasos>_steps.zip
+            b) Si el entrenamiento falla por un error (no Ctrl-C), se guarda
+            el modelo en p1_modelo_<alg>_s<semilla>_interrumpido.zip antes
+            de mostrar el error.
+  - Dónde:  p1_entrenar.py: RUTA_CHECKPOINTS, modo_entrenar(), argumento
+            --checkpoint
+  - Por qué: antes el modelo sólo se guardaba al terminar o con Ctrl-C; un
+            fallo del simulador o del puente a mitad (p. ej. "Se ha
+            interrumpido el flujo de blobs") perdía horas de entrenamiento.
+  - Efecto: no cambia el aprendizaje. El PPO s0 en marcha (lanzado antes
+            del cambio) no tiene copias. Las copias de SAC no incluyen el
+            búfer de repetición: sirven para evaluar, no para reanudar el
+            entrenamiento exactamente. Probado con Pendulum-v1 (copias a
+            100/200/300 pasos y carga correcta).
+
+
+-----------------------------------------------------------------
+[2026-10-14] 12. Banda de la recompensa referida al centro del seguidor
+-----------------------------------------------------------------
+  - Qué:    SIZE_BANDA_MIN 51,8 -> 99,8 y SIZE_OBJ 92 -> 139,1 (SIZE_BANDA_MAX
+            sigue en 207). Nuevas claves BANDA_PROTOCOLO_M [0,20, 0,45] y
+            CAMARA_OFFSET_M 0,09; importar_calibracion() calcula la banda en
+            size a partir de ellas (antes: 0,25-0,50 m fijos en el código).
+            Copia de la configuración anterior: p1_config_ppo_s0.json.
+            Además, el evaluador ya no dice que la correlación desviación<->
+            posx "debe ser positiva" (lo que importa es |r| alto).
+  - Dónde:  p1_robobo_env.py: CONFIG_POR_DEFECTO, importar_calibracion();
+            p1_config.json (regenerado); p1_evaluar.py (mensaje y docstring)
+  - Por qué: primera evaluación anexo B (PPO s0, C3): completado (120 s,
+            0 fallos), |desv| 5,4°, pero sólo 33,2 % de pasos en banda con
+            separación media 0,463 m. Comparando size con la separación real
+            (210 pasos con la pelota centrada): separación - sqrt(K/size) =
+            0,090 m de mediana (p25 0,075, p75 0,107). La calibración mide
+            desde la CÁMARA (frontal) y el anexo desde el CENTRO del
+            seguidor. La banda antigua [51,8, 207] equivalía a 0,34-0,59 m
+            del centro: la política mantenía bien SU banda, desplazada.
+            Banda del anexo 0,20-0,45 m -> 0,11-0,36 m de la cámara; por
+            debajo de 0,25 m de la cámara la pelota sale cortada, así que la
+            parte alcanzable con el blob es 0,34-0,45 m -> size [99,8, 207].
+            Correlación desviación<->posx: -0,91 (|r| alto: la posx mide la
+            desviación; signo contrario al convenio de rotation.y).
+  - Efecto: CAMBIA la recompensa: los modelos nuevos no son comparables en
+            recompensa con ppo_s0 (sí con el anexo B). La observación no
+            cambia (misma normalización), así que ppo_s0 se sigue pudiendo
+            evaluar; para que quede exacto, con --config p1_config_ppo_s0.json.
+            Variante para la tabla de experimentos: banda antigua vs nueva.
+            El offset 0,09 m sale de un solo episodio y la pose del seguidor
+            puede ir hasta ~4 cm retrasada: confirmarlo con más evaluaciones.
+            Deshacer: CAMARA_OFFSET_M 0 y BANDA_PROTOCOLO_M [0,25, 0,50] y
+            volver a importar la calibración.
+
+
+-----------------------------------------------------------------
+[2026-10-14] 13. El evaluador mide la velocidad real del guía
+-----------------------------------------------------------------
+  - Qué:    p1_evaluar.py imprime, tras cada configuración y en --resumen,
+            la velocidad media real del guía y su perfil por tramos de 10 s
+            (verdad del terreno), y avisa si dos configuraciones dan la misma
+            velocidad media (< 0,01 m/s de diferencia) o si C1 fluctúa.
+  - Dónde:  p1_evaluar.py: velocidad_guia(), avisar_velocidad_guia(),
+            resumen(), main()
+  - Por qué: evaluación de ppo_s0 en C1/C2/C3 (14/10): los tres CSV dan el
+            MISMO guía (0,136 m/s, 16,3 m en 120 s, mismo perfil). La
+            configuración del guía no se aplicó: las tres son en realidad
+            la configuración por defecto del escenario. Los resultados de
+            C1 y C2 NO son válidos y hay que repetirlos.
+            Otros hallazgos de esa evaluación:
+      * Diferencia cámara-centro confirmada en C1/C2/C3: 0,088 / 0,087 /
+        0,090 m (mediana).
+      * El seguidor recorre 15,8 m en 120 s (0,131 m/s reales) con una
+        velocidad ordenada media de 0,070 m/s: se mueve ~1,9 veces lo que
+        ordena cmd_vel. Pendiente: confirmar el multiplicador de velocidad
+        del simulador. Afecta a la transferencia al robot real.
+      * Línea base aleatoria en C3: guía perdido (sin ver > 3 s) a los 5,5 s.
+  - Efecto: sólo informativo; no cambia las métricas.
+
+-----------------------------------------------------------------
+[2026-10-15] 14. Aviso de velocidad del guía: solo se compara C1
+-----------------------------------------------------------------
+  - Qué:    avisar_velocidad_guia() ya no compara C2 con C3; solo compara
+            C1 con las demás (y mantiene el aviso de C1 fluctuante).
+  - Dónde:  p1_evaluar.py: avisar_velocidad_guia()
+  - Por qué: segunda evaluación de sac_s0 (15/10): C2 0,128 m/s y C3
+            0,127 m/s de media daban el aviso, pero ambos perfiles (tramos
+            de 2 s) oscilan entre 0,01-0,24 m/s, y C1 sí da 0,050 constante:
+            la configuración estaba aplicada. C2 (Crucero 10-40) y C3
+            (Variable 10-40) comparten rango, así que su media puede
+            coincidir: era un falso positivo.
+            Resultados sac_s0 (SAC, guía Variable 10-40 en entrenamiento,
+            banda nueva, 20k pasos), dos evaluaciones completas:
+              1ª: C1 99,3% banda / C2 83,1% / C3 86,7%; 3/3 completados
+              2ª: C1 99,3% banda / C2 88,4% / C3 86,4%; 3/3 completados
+            |desv| media 2,7-3,7°, correlación desv.-posx -0,92 / -0,94.
+            La 2ª ejecución sobrescribió los CSV de la 1ª (misma etiqueta).
+  - Efecto: sólo el mensaje; las métricas no cambian.
+
+-----------------------------------------------------------------
+[2026-10-15] 15. Curvas de aprendizaje con varias semillas
+-----------------------------------------------------------------
+  - Qué:    --graficas reescrito. Agrupa monitores por prefijo (--grupos,
+            por defecto sac_s -> monitor_sac_s0/s1/s2) y dibuja, frente a
+            pasos de step(): recompensa, duración y fracción de episodios
+            por causa de fin (choque / guía perdido / límite de tiempo).
+            Media móvil (--ventana) + serie cruda tenue; con varias semillas,
+            media y banda min-max interpoladas en una rejilla común (solo
+            donde todas tienen datos). Línea de la política aleatoria con
+            --ref o, si falta, la media de p1_logs/pasos_aleatorio_s0.csv.
+            Nueva opción --titulo. Imprime el texto base para el pie.
+  - Dónde:  p1_entrenar.py: _leer_monitor() (lee también choque/perdido),
+            _recompensa_aleatoria(), modo_graficas(), argumentos --grupos y
+            --titulo; import csv.
+            Contenedor: pip install --user "matplotlib>=3.9" (3.11.2), porque
+            el matplotlib del sistema (3.6.3) no carga con numpy 2.5.3. Solo
+            añade matplotlib y kiwisolver; numpy y SB3 no cambian.
+  - Por qué: el enunciado pide ≥3 semillas con media + banda, causas de fin y
+            la línea de la política aleatoria; antes se superponían todos los
+            monitor_*.csv (también PPO) sin agrupar.
+  - Efecto: solo figuras. memoria.txt nuevo: puntos para la memoria.
+            OJO: la referencia aleatoria (-15,7) es del 14/10 con la banda
+            antigua; repetir --aleatorio con la configuración actual.

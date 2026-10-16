@@ -1,0 +1,248 @@
+PUNTOS PARA LA MEMORIA — RIA P1 (seguimiento del guía en Follow City)
+=====================================================================
+
+Notas de trabajo, no es la memoria. Cada punto lleva el dato y de dónde
+sale (CSV, código o CAMBIOS.txt) para poder comprobarlo y citarlo.
+Estructura según el enunciado simplificado: 1 entorno, 2 pruebas por
+configuración + curvas, 3 tablas anexo B, 4 conclusiones; + transferencia real.
+Límite: 6 páginas + anexos, Calibri 11, figuras/tablas numeradas con pie.
+
+
+1. ENTORNO (observación, acción, recompensa, fin, reinicio)
+-----------------------------------------------------------
+Observación  [posx, size, posy] del blob verde, normalizados (p1_robobo_env.py).
+  - Solo sensores del seguidor por ROS 2; nada del simulador entra en la
+    observación ni en la recompensa (regla: lo que existe en el robot real).
+  - posy se añadió para romper la ambigüedad de size: a ~0,20 m la pelota sale
+    cortada por abajo y su size (~81-84) se parece al de ~0,40-0,45 m.
+    (CAMBIOS nº 7)
+  - Qué se devuelve si no se ve la pelota: decirlo explícitamente.
+
+Acción  continua, cmd_vel: v en [0; 0,15] m/s, w en [-0,5; 0,5] rad/s.
+  - cmd_vel se detiene si no recibe órdenes en 0,5 s reales -> periodo de
+    control 0,2 s (PASO_S), igual que el periodo de publicación del blob (5 Hz).
+  - OBSERVACIÓN IMPORTANTE: con la verdad del terreno, el seguidor recorre
+    ~1,9 veces lo que ordena cmd_vel (15,8 m en 120 s con v ordenada media
+    0,070 m/s -> 0,131 m/s reales). Declarar el multiplicador de velocidad del
+    simulador y que es el mismo en entrenamiento y evaluación. (CAMBIOS nº 13)
+
+step() devuelve una observación posterior a la acción: se espera al primer
+mensaje de blobs con marca de tiempo posterior al envío de la acción.
+Explicarlo (el enunciado lo pide expresamente).
+
+Recompensa  (coeficientes en p1_config.json; cada término y de qué depende)
+  vista       +0,5 (R_VISTA) si el blob es visible               -> visibilidad del blob
+  centrado    -0,5 (W_CENT) * |posx|                             -> posx
+  separación  +1,0 (W_BANDA) si size en banda [99,8; 207]         -> size (+ posy para
+              -0,8 (K_FUERA) * excursión fuera de banda (0..1)      descartar pelota cortada)
+  giro        -0,3 (K_GIRO) * |w|/W_MAX                          -> acción
+  d_giro      -0,3 (K_DGIRO) * |w - w_prev|/W_MAX (evita "eses")  -> acción
+  pérdida     -1,0 (R_PERDIDO_PASO) por paso sin ver el guía      -> visibilidad
+  terminal    -20 (R_CHOQUE) al chocar, -5 (R_PERDIDO_FIN) al perderlo
+  - Diseño: un paso visible siempre vale más que uno perdido (peor visible
+    -0,8 > -1,0), así no compensa "rendirse".
+  - El CARRIL no es término de la recompensa: no es inferible de la
+    observación (enunciado ap. 4). Solo el término centrado arrastra al
+    seguidor por la trayectoria del guía. En el anexo B salirse del carril no
+    es fallo; se juzga en los vídeos.
+
+Banda de la recompensa (CAMBIOS nº 12)  — justificar con datos
+  - El protocolo mide separación centro del seguidor <-> pelota, banda
+    0,20-0,45 m. La calibración mide distancia cámara <-> pelota.
+  - Diferencia cámara-centro medida con la verdad del terreno: 0,088 / 0,087 /
+    0,090 m (medianas en C1/C2/C3) -> CAMARA_OFFSET_M = 0,09.
+  - Banda en size: límite lejano 0,45 - 0,09 = 0,36 m de la cámara -> size 99,8.
+    Límite cercano: 0,20 - 0,09 = 0,11 m, pero por debajo de ~0,25 m la pelota
+    sale cortada y no hay datos -> se usa 0,25 m -> size 207.
+  - Comprobado con la evaluación: size 100 equivale a ~0,45-0,47 m reales.
+  - Limitaciones: meseta de size ~181-187 entre 0,32 y 0,38 m (poca
+    resolución dentro de la banda); por debajo de 0,29 m no hay datos.
+  - Antes la banda era [51,8; 207] (referida a la cámara): el primer PPO
+    mantenía 0,54 m de media en C2, fuera de la banda del protocolo.
+
+Terminación y truncamiento
+  - Choque: pelota cortada por abajo (posy) o desaparece tras verse cerca y
+    centrada. Guía perdido: 12 pasos seguidos sin verlo (PERDIDO_MAX = 2,4 s).
+  - Truncamiento: 300 pasos (PASOS_MAX, ~60 s a 0,2 s/paso).
+
+Reinicio
+  - Reinicio de la escena por conexión directa a RoboboSim (RESET_DIRECTO): el
+    puente se lanza SOLO con modules:="['blob']" porque la conexión del módulo
+    sim del puente se caía. (CAMBIOS nº 6)
+  - Info privilegiada del simulador solo para reiniciar y registrar métricas
+    (permitido por el enunciado).
+  - Sin simulador (robot real): reinicio manual (usar_simulador=False, Enter).
+
+
+2. ENTRENAMIENTO Y PRUEBAS
+--------------------------
+Algoritmos: obligatorio probar SAC y PPO. Justificación (cada paso cuesta
+tiempo real):
+  - SAC es off-policy: guarda la experiencia (buffer 50 000) y la reutiliza
+    -> aprovecha mucho mejor cada paso.
+  - PPO es on-policy: usa cada lote de 512 pasos una vez y lo descarta
+    -> necesita muchos más pasos. En 20 000 pasos solo hace ~40 actualizaciones.
+  Hiperparámetros: p1_entrenar.py, HIPER_SAC / HIPER_PPO (declararlos en una tabla).
+
+Segundos por paso medidos (incluye reinicios; de los monitor_*.csv):
+  SAC s0/s1/s2: 0,438 / 0,436 / 0,438 s/paso -> ~2,4 h por 20 000 pasos
+  PPO s0 (nuevo): 0,614 s/paso -> 3,5 h  (más episodios cortos = más reinicios)
+  PPO crucero 18-30: 0,536 s/paso -> 3,0 h
+
+Configuración del guía en entrenamiento (declararla):
+  - PPO antiguo: Crucero 18-30 (de memoria; coherente con los datos).
+  - SAC s0 y PPO s0: Variable 10-40 (era el plan; no hay registro automático,
+    ver "problemas"). Evidencia indirecta: SAC s0 aguanta guía hasta 0,24 m/s
+    y usa v hasta 0,143 m/s en C2/C3; su curva es casi igual a la de s1 y s2.
+  - SAC s1 y s2: Variable 10-40 (la última evaluación antes de lanzarlos dejó
+    el guía en C3 = Variable 10-40 y la configuración se mantiene).
+
+Curvas de aprendizaje (p1_entrenar.py --graficas):
+  - Eje X en pasos de step(); recompensa, duración y causa de fin por episodio;
+    media móvil de 10 episodios + serie cruda tenue; 3 semillas con media y
+    banda min-max; línea roja = recompensa media de la política aleatoria.
+  - SAC (3 semillas): igual que la aleatoria hasta ~2 500 pasos; despega entre
+    ~5 000 y 8 000; desde ~10 000 casi todos los episodios llegan a 300 pasos
+    (fin por límite de tiempo); recompensa ~300.
+  - PPO s0: recompensa de -20 a -10 en 20 000 pasos; ningún episodio pasa de
+    112 pasos; casi todos acaban en "guía perdido".
+  - Pie de cada figura: configuración del guía, nº semillas, ventana, pasos.
+  - Comentar cada figura en el texto.
+
+Línea base aleatoria
+  - En el anexo B (C3): guía perdido (sin ver > 3 s) a los 5,5 s.
+  - OJO: la recompensa aleatoria de referencia (-15,7, pasos_aleatorio_s0.csv)
+    se midió el 14/10 con la banda ANTIGUA. Repetirla con la configuración
+    actual antes de hacer las figuras finales.
+
+
+3. RESULTADOS ANEXO B (3 ejecuciones de 120 s, política determinista)
+---------------------------------------------------------------------
+(% banda / separación media / |desv| media / % pasos <15°)
+
+SAC s0 (2ª evaluación; la 1ª dio 99,3 / 83,1 / 86,7 % banda, también 3/3)
+  C1  completado  99,3%  0,379 m  2,9°  100%
+  C2  completado  88,4%  0,408 m  3,5°  98,7%
+  C3  completado  86,4%  0,405 m  3,7°  99,0%
+  Total 3/3, 91,4% en banda
+
+SAC s1
+  C1  completado  99,0%  0,375 m  2,6°  100%
+  C2  completado  74,1%  0,428 m  3,6°  98,7%
+  C3  completado  85,0%  0,403 m  3,2°  99,0%
+  Total 3/3, 86,0% en banda
+
+SAC s2
+  C1  completado  99,0%  0,363 m  2,6°  100%
+  C2  completado  64,1%  0,436 m  5,4°  99,7%
+  C3  perdido por vista a los 87,9 s  70,9%  0,415 m  8,5°  96,8%
+  Total 2/3, 78,7% en banda
+
+PPO s0 (Variable 10-40, banda nueva)
+  C1  perdido por vista a los 49,7 s  99,2%  0,371 m  10,7°  87,1%
+  C2  perdido por vista a los 63,4 s  75,5%  0,426 m  11,7°  76,1%
+  C3  perdido por vista a los 9,1 s   91,3%  0,400 m  24,1°  52,2%
+  Total 0/3
+
+PPO crucero 18-30 (banda antigua)
+  C1  completado  99,0%  0,352 m  2,2°
+  C2  completado  34,2%  0,544 m  6,4°   (se queda atrás; máx. 0,826 m)
+  C3  completado  51,5%  0,469 m  5,6°
+  Total 3/3, 61,6% en banda
+
+Aleatoria: C3 perdido a los 5,5 s.
+
+Política final elegida: SAC s0 (3/3 en dos evaluaciones, mayor % en banda).
+SAC con 3 semillas: 8 de 9 ejecuciones completadas.
+
+Comprobación de la calibración (lo pide el anexo B): correlación entre la
+desviación real y posx del blob = -0,90 a -0,95 en todas las evaluaciones.
+Signo negativo por convenio de ejes; |r| alto = posx mide bien la desviación.
+
+Al leer las tablas: el % en banda se calcula solo sobre los pasos hasta el
+fallo. Un 91% en banda con fallo a los 9 s (PPO C3) no es un buen resultado;
+leer siempre junto a "completados".
+
+
+4. TABLA DE EXPERIMENTOS (≥3 variantes, qué cambia y su efecto)
+---------------------------------------------------------------
+  a) PPO, guía Crucero 18-30, banda antigua -> 3/3, pero 34% en banda en C2
+     (se queda lejos con el guía rápido).
+  b) Banda corregida al centro del seguidor (CAMBIOS nº 12) + guía Variable
+     10-40 en el entrenamiento. OJO: entre a) y c) cambian DOS cosas a la vez
+     (guía y banda); decirlo.
+  c) PPO vs SAC en las mismas condiciones (mismo guía, banda, semilla y pasos)
+     -> comparación limpia: SAC 3/3, PPO 0/3.
+  d) SAC con 3 semillas -> variabilidad: 3/3, 3/3, 2/3.
+
+
+5. FENÓMENOS / PROBLEMAS / MEJORAS (conclusiones)
+-------------------------------------------------
+Fallo de SAC s2 en C3 (bien diagnosticado, del CSV eval_sac_s2_C3.csv):
+  - t = 83,5 s: guía a 0,22 m/s, separación 0,55 m.
+  - t = 84,3 s: el guía frena en seco a 0 m/s (modo Variable).
+  - El seguidor no frena a tiempo: separación 0,45 -> 0,24 m en < 1 s; la
+    pelota sale cortada (size 22) y deja de verse (0,21 -> 0,12 m).
+  - Sin pelota, la política gira sobre sí misma para buscarla (aprendido para
+    cuando la pelota se escapa por un lado); se da la vuelta 150° y a los 3 s
+    sin verla se da por perdido.
+  - Causa de fondo: con la cámara sola, "pelota perdida por un lado" y
+    "pelota demasiado cerca" dan la misma observación.
+  - Mejora: sensores IR delanteros cuando el guía está muy cerca (el enunciado
+    lo valora). Está preparada como variante (OBS_IR en p1_config.json), no
+    entrenada.
+
+Fallo de PPO (eval_ppo_s0_C*.csv):
+  - Zigzag creciente: w salta de +0,5 a -0,5 en pasos consecutivos y posx
+    oscila (+0,88 / -0,24 / +0,82) hasta que la pelota sale por un lado del
+    campo de visión, con separación correcta (0,28-0,51 m).
+  - Sin pelota avanza recto (v 0,15, w +0,11): no ha aprendido a buscar.
+
+El guía no espera: acelera y frena (C2/C3 llegan a 0,24 m/s; C1 constante
+0,05 m/s). 1 unidad de velocidad del sim ~ 0,005 m/s.
+
+Carril: no observable; el seguidor solo lo respeta indirectamente al seguir
+centrado al guía. Ver vídeos.
+
+Frecuencias y retardos: blob a 5 Hz reales; paso de control 0,2 s; ~0,40 s
+reales por paso en evaluación (~300 pasos en 120 s).
+
+Un solo blob verde por imagen: la ciudad real tiene otros elementos verdes
+(riesgo en la transferencia).
+
+Velocidad del simulador: el seguidor se mueve ~1,9x lo ordenado; declarar el
+multiplicador y que en el robot real la dinámica será distinta.
+
+Configuración del guía no registrada automáticamente en el entrenamiento: RoboboSim no deja
+leerla por API; la del SAC s0 se deduce de forma indirecta. Mejora: medir la
+velocidad del guía en cada episodio y guardarla en el monitor.
+
+Detalles del evaluador (declararlos):
+  - Verdad del terreno por conexión directa a RoboboSim: robot 0 = seguidor,
+    objeto PATHFOLLOWROBOBO = guía, objeto CYLINDERMIDBALL = pelota.
+  - La pelota está a 0,118 m detrás del guía (no a 0,08 m como dice el
+    enunciado); se usa la posición real de la pelota.
+  - Pose del seguidor a ~5 Hz (huecos de hasta 0,27 s) -> desfase de ~4 cm.
+  - Las terminaciones del entorno propio se registran pero no cortan la
+    ejecución; el desenlace lo deciden los criterios del anexo B.
+
+
+6. TRANSFERENCIA AL ROBOT REAL (pendiente)
+------------------------------------------
+  - Repetir la caracterización del sensor en el robot real (p1_calibrar.py).
+  - Qué se espera que se degrade y por qué: velocidad real vs. simulada (x1,9),
+    iluminación y otros verdes en el detector de blobs, retardos, latencia
+    de la red. Se evalúa el análisis, no el éxito.
+
+
+7. EVIDENCIAS A ENTREGAR
+------------------------
+  - Modelos: p1_modelo_sac_s0/s1/s2.zip, p1_modelo_ppo_s0.zip,
+    p1_modelo_ppo_crucero1830_s0.zip + p1_config.json (+ p1_config_ppo_s0.json
+    para el PPO antiguo).
+  - Registros: p1_logs/monitor_*.csv (por episodio), p1_logs/eval_*.csv
+    (por paso), y el código que los lee (p1_entrenar.py --graficas,
+    p1_evaluar.py --resumen).
+  - Vídeos de la política final en C1, C2 y C3.
+  - Declaración de uso de IA (1 página): base en CAMBIOS.txt (incluye los
+    errores del asistente detectados y cómo se corrigieron).
