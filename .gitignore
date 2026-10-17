@@ -1,4 +1,4 @@
-p1_logs/
+
 p1_checkpoints/
 __pycache__/
 .ruff_cache/
