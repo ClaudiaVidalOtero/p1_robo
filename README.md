@@ -10,7 +10,8 @@ leídos por ROS 2.
 p1_robobo_env.py     Entorno Gymnasium (observación, acción, recompensa, reinicio)
 p1_calibrar.py       Caracterización del sensor (apartado 5.1)
 p1_entrenar.py       Entrenamiento SB3, línea base aleatoria y curvas de aprendizaje
-p1_evaluar.py        Evaluador del anexo B (verdad del terreno solo aquí)
+p1_evaluar.py        Evaluador del anexo B (verdad del terreno solo aquí; escribe los CSV)
+p1_graficas_eval.py  Métricas, tablas y figuras del anexo B desde los CSV de evaluación
 
 config/
   p1_config.json                    Configuración activa (constantes calibradas + recompensa)
@@ -63,7 +64,11 @@ python3 p1_entrenar.py --graficas --grupos sac_s --ventana 10
 # 6. Evaluación anexo B -> p1_logs/eval_<etiqueta>_<C>.csv
 python3 p1_evaluar.py --algoritmo sac --semilla 0
 python3 p1_evaluar.py --algoritmo aleatorio
-python3 p1_evaluar.py --algoritmo sac --semilla 0 --resumen   # tablas desde los CSV
+
+# 7. Métricas, tablas y figuras del anexo B a partir de los CSV de evaluación
+python3 p1_graficas_eval.py                    # todo lo que haya en p1_logs
+python3 p1_graficas_eval.py --etiquetas sac_s0 # sólo una política
+python3 p1_graficas_eval.py --solo-tablas      # sin matplotlib
 ```
 
 Para evaluar un modelo entrenado con otra configuración, pasar la suya:

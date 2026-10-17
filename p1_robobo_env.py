@@ -129,11 +129,7 @@ from gymnasium import spaces
 from rclpy.node import Node
 from std_msgs.msg import Int32MultiArray
 
-# ---------------------------------------------------------------------
-# Interfaces de robobo_ros2.
-# `source /opt/ros/robobo/setup.bash` y comprobar con:
-#   ros2 interface list | grep -i robobo
-# ---------------------------------------------------------------------
+
 try:
     from robobo_ros2_interfaces.msg import BlobArray
     from robobo_ros2_interfaces.srv import MoveTilt, SetActiveColorBlobs
@@ -142,8 +138,7 @@ except ImportError:
     BlobArray = SetActiveColorBlobs = MoveTilt = None
     HAY_INTERFACES_BLOB = False
 
-# Interfaces del módulo sim. No existen en imágenes del contenedor anteriores
-# al módulo sim, por eso la importación no puede ser obligatoria.
+
 try:
     from robobo_ros2_interfaces.msg import RobotLocation
     from robobo_ros2_interfaces.srv import ResetSimulation
@@ -152,7 +147,6 @@ except ImportError:
     RobotLocation = ResetSimulation = None
     HAY_INTERFACES_SIM = False
 
-# Colocar el robot es opcional (arranques aleatorizados); puede no existir.
 try:
     from robobo_ros2_interfaces.srv import SetRobotLocation
 except ImportError:
@@ -170,9 +164,6 @@ AVISO_SIN_SIM = (
     'usar_simulador=False (--sin-simulador) y reponer el robot a mano.')
 
 
-# =====================================================================
-# Constantes que también usa p1_calibrar.py (no cambiar sus nombres)
-# =====================================================================
 
 NS_BASE = '/robobo/robot_0/base'
 NS_SIM = '/robobo/robot_0/sim'
@@ -190,7 +181,7 @@ RUTA_MODELOS = 'modelos'
 
 
 # =====================================================================
-# Configuración (archivo JSON, fuera del código: apartados 5.5 y 7)
+# Configuración 
 # =====================================================================
 
 # Valores de reserva. Sirven para arrancar sin p1_config.json y como base
@@ -203,13 +194,9 @@ CONFIG_POR_DEFECTO = {
     'POSX_CENTRO': 50.0,
 
     'SIZE_MAX': 330.0,         # normalización del tamaño del blob
-    # Banda objetivo del anexo B: separación CENTRO del seguidor - PELOTA.
-    # La calibración mide la distancia CÁMARA - pelota, y la cámara está en
-    # la parte delantera del robot: separación = distancia_cal + CAMARA_OFFSET_M.
-    # Offset medido con la verdad del terreno (evaluación PPO s0 en C3,
-    # mediana de separación - sqrt(K/size), pelota centrada): 0,09 m.
-    'BANDA_PROTOCOLO_M': [0.20, 0.45],
-    'CAMARA_OFFSET_M': 0.09,
+
+    'BANDA_PROTOCOLO_M': [0.20, 0.45],  # Banda objetivo del anexo B: separación CENTRO del seguidor - PELOTA.
+    'CAMARA_OFFSET_M': 0.09,   # Offset del centro del seguidor a la cámara (0,09 m).
     'SIZE_BANDA_MIN': 100.0,   # size a 0,45 m del centro (0,36 m de la cámara)
     'SIZE_BANDA_MAX': 207.0,   # size a 0,25 m de la cámara: por debajo la
                                # pelota sale cortada y el size deja de crecer

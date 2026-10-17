@@ -405,20 +405,7 @@ def _recompensa_aleatoria(semilla=0):
 
 
 def modo_graficas(args):
-    """Curvas de aprendizaje con Matplotlib (no capturas de TensorBoard).
-
-    Un grupo = un prefijo de monitor (p. ej. 'sac_s' agrupa monitor_sac_s0,
-    _s1, _s2...). Por cada grupo se dibuja, frente a pasos de step():
-      1. recompensa acumulada por episodio,
-      2. duración del episodio (pasos),
-      3. fracción de episodios por causa de fin (choque / guía perdido /
-         límite de tiempo),
-    con media móvil de `ventana` episodios. Con una sola semilla: media móvil
-    y serie cruda tenue. Con varias: serie cruda tenue de cada semilla, media
-    de las medias móviles y banda min-max entre semillas (interpoladas en una
-    rejilla común de pasos, solo donde todas tienen datos).
-    Línea horizontal: recompensa media de la política aleatoria (--ref o, si
-    no se da, la de p1_logs/pasos_aleatorio_s0.csv).
+    """Curvas de aprendizaje con Matplotlib..
     """
     import matplotlib
     matplotlib.use('Agg')
@@ -493,7 +480,7 @@ def modo_graficas(args):
         txt = 'política aleatoria' + (f' ({n_ref} ep.)' if n_ref else '')
         ax_r.axhline(ref, color='red', linestyle='--', linewidth=1, label=txt)
 
-    # Leyenda de causas: estilo de línea = causa (el color es el grupo).
+    # Leyenda de causas: estilo de línea = causa.
     for causa, ls in estilos_causa.items():
         nombre = {'choque': 'choque', 'perdido': 'guía perdido',
                   'tiempo': 'límite de tiempo'}[causa]
@@ -519,9 +506,7 @@ def modo_graficas(args):
           + (f'; ref. aleatoria {ref:.1f}' if ref is not None else ''))
 
 
-# =====================================================================
-# Línea de órdenes
-# =====================================================================
+
 
 def main():
     p = argparse.ArgumentParser(

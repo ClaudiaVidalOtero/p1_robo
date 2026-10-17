@@ -414,7 +414,7 @@ def calibrar_manual(distancia, tilt=TILT_DEFECTO, n_medidas=N_MEDIDAS,
         if barrido:
             etapa_barrido(ya_colocada=tamanos)   # guarda al terminar
         elif tamanos:
-            guardar()   # --sin-barrido: antes no se guardaba nada
+            guardar()   
         print('\nListo. Siguiente: otra distancia, o importar con\n'
               '  python3 -c "from p1_robobo_env import importar_calibracion '
               'as i; i()"')

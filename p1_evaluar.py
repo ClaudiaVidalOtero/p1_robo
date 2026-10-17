@@ -7,6 +7,11 @@ entorno RoboboSeguidorEnv y la mide con la VERDAD DEL TERRENO del simulador,
 con los criterios de fallo del protocolo e independientemente de la
 recompensa y de las terminaciones propias del entorno.
 
+Este script SÓLO ejecuta episodios: escribe un registro por paso y por
+configuración (p1_logs/eval_<etiqueta>_<C>.csv). Las métricas, las tablas y
+las figuras del anexo B se generan aparte con p1_graficas_eval.py, que es
+quien define PROTOCOLO, CONFIGURACIONES y COLUMNAS (esquema del CSV).
+
 ----------------------------------------------------------------------
 PROTOCOLO (anexo B, sin modificaciones)
 ----------------------------------------------------------------------
@@ -26,12 +31,6 @@ PROTOCOLO (anexo B, sin modificaciones)
   Separación = distancia entre el centro del seguidor y la pelota verde.
   Banda objetivo 0,20 - 0,45 m.
   Desviación = ángulo entre el rumbo del seguidor y la dirección a la pelota.
-
-  Métricas, en conjunto y por configuración:
-      completados   número y % de episodios completados
-      desenlaces    episodios terminados por cada causa
-      separación    % de pasos en banda y separación media
-      desviación    media de |desviación| (°) y % de pasos con |desv| < 15°
 
 ----------------------------------------------------------------------
 VERDAD DEL TERRENO (sólo aquí; NUNCA en la observación ni en la política)
@@ -66,24 +65,29 @@ USO
       python3 p1_evaluar.py --algoritmo ppo --semilla 0 --configs C3
   Línea base aleatoria:
       python3 p1_evaluar.py --algoritmo aleatorio
-  Rehacer las tablas a partir de los CSV ya guardados (sin simulador):
-      python3 p1_evaluar.py --algoritmo ppo --semilla 0 --resumen
 
   Registro por paso: p1_logs/eval_<etiqueta>_<C>.csv (uno por configuración).
-  Las métricas se calculan SIEMPRE a partir de esos CSV, así que las tablas de
-  la memoria se pueden rehacer con --resumen.
+  Tablas y figuras (sin simulador, a partir de esos CSV):
+      python3 p1_graficas_eval.py
 """
 
 import argparse
 import contextlib
 import csv
-import glob
 import math
 import os
 import time
 
 import numpy as np
 
+from p1_graficas_eval import (
+    COLUMNAS,
+    CONFIGURACIONES,
+    PROTOCOLO,
+    RUTA_LOGS,
+    leer_csv,
+    velocidad_guia,
+)
 from p1_robobo_env import (
     RUTA_CONFIG,
     RUTA_MODELOS,
@@ -92,38 +96,10 @@ from p1_robobo_env import (
     dif_ang,
 )
 
-RUTA_LOGS = 'p1_logs'
-
-# Parámetros del protocolo (anexo B). Son comunes a todos los grupos y no
-# dependen de la calibración: por eso están aquí y no en p1_config.json.
-PROTOCOLO = {
-    'DURACION_S': 120.0,
-    'BANDA_MIN_M': 0.20,
-    'BANDA_MAX_M': 0.45,
-    'COLISION_M': 0.12,
-    'PERDIDO_M': 0.90,
-    'SIN_VER_S': 3.0,
-    'DESV_UMBRAL_DEG': 15.0,
-}
-
-CONFIGURACIONES = {
-    'C1': 'Lenta constante   modo Crucero   velocidad 10 - 10',
-    'C2': 'Contraste         modo Crucero   velocidad 10 - 40',
-    'C3': 'Fluctuante        modo Variable  velocidad 10 - 40',
-}
-
 # Identificadores en la escena "Follow City" de RoboboSim.
 ID_SEGUIDOR = 0
 OBJ_GUIA = 'PATHFOLLOWROBOBO'
 OBJ_PELOTA = 'CYLINDERMIDBALL'
-
-COLUMNAS = ['config', 'episodio', 'paso', 't',
-            'seg_x_mm', 'seg_z_mm', 'seg_rumbo_deg',
-            'pelota_x_mm', 'pelota_z_mm', 'guia_x_mm', 'guia_z_mm',
-            'separacion_m', 'en_banda', 'desviacion_deg',
-            'visible', 'blob_posx', 'blob_size', 't_sin_ver',
-            'a0', 'a1', 'v', 'w',
-            'entorno_choque', 'entorno_perdido', 'desenlace']
 
 
 # =====================================================================
@@ -132,21 +108,6 @@ COLUMNAS = ['config', 'episodio', 'paso', 't',
 
 class VerdadTerreno:
     """Pose del seguidor, del guía y de la pelota leídas de RoboboSim.
-
-    RoboboSim envía las posiciones por la conexión websocket de forma
-    continua; la librería las guarda en un diccionario que se REEMPLAZA con
-    cada mensaje. Comparar la identidad del diccionario permite saber si ha
-    llegado una lectura nueva sin usar los callbacks de la librería (el de
-    objetos no funciona en robobosim 1.5.1: se registra con otra clave).
-
-    Sólo se leen datos, nunca se envía nada: así no puede saltar el sys.exit
-    que hace la librería al enviar sin conexión.
-
-    Frecuencias medidas: pelota y guía ~22 Hz; seguidor ~5 Hz (huecos de
-    hasta 0,27 s). En cada paso se toma la ÚLTIMA lectura sin esperar: esperar
-    una pose nueva del seguidor alargaría el paso hasta 0,27 s y cambiaría el
-    periodo de control respecto al entrenamiento. El error que introduce es
-    como mucho v * 0,27 s (~4 cm a 0,15 m/s); se declara en la memoria.
     """
 
     def __init__(self, ip, espera_max_s=5.0, caducidad_s=2.0):
@@ -177,13 +138,6 @@ class VerdadTerreno:
 
     def leer(self, nueva=False):
         """Devuelve (seguidor, guia, pelota) como tuplas (x, z, rumbo).
-
-        nueva=False: la última lectura recibida (uso en cada paso). Si la
-        pelota, que se renueva a ~22 Hz, lleva más de caducidad_s sin
-        renovarse, la conexión se da por caída y se espera una lectura nueva.
-        nueva=True: espera a que lleguen posiciones renovadas tras la llamada
-        (uso tras reiniciar la escena). Si no llega nada, reconecta
-        una vez.
         """
         if not nueva and self._conectado():
             ahora = self._crudo()
@@ -201,8 +155,7 @@ class VerdadTerreno:
                 ahora = self._crudo()
                 completos = all(d is not None for d in ahora)
                 # La pelota se renueva siempre (~22 Hz). Del seguidor se
-                # espera una pose nueva, salvo que tarde más de 1 s (por si
-                # RoboboSim no la envía mientras está parado).
+                # espera una pose nueva, salvo que tarde más de 1 s.
                 renovados = (ahora[2] is not antes[2]
                              and (ahora[0] is not antes[0]
                                   or time.time() - t0 > 1.0))
@@ -338,163 +291,6 @@ def episodio(env, verdad, politica, config, num, escritor, args):
     return desenlace
 
 
-def velocidad_guia(filas):
-    """Velocidad media real del guía (m/s) y su perfil por tramos de 10 s.
-
-    La configuración del guía se pone a mano en RoboboSim y nada la confirma.
-    Medir su velocidad con la verdad del terreno detecta una configuración
-    que no se ha aplicado (en la primera evaluación, C1, C2 y C3 dieron el
-    mismo perfil: 0,136 m/s y 16,3 m en 120 s).
-    """
-    if len(filas) < 2:
-        return None, []
-    t = np.array([float(f['t']) for f in filas])
-    x = np.array([float(f['guia_x_mm']) for f in filas])
-    z = np.array([float(f['guia_z_mm']) for f in filas])
-    d = np.hypot(np.diff(x), np.diff(z)) / 1000.0
-    dt = np.diff(t)
-    media = float(d.sum() / max(t[-1] - t[0], 1e-6))
-    perfil = []
-    for a in np.arange(0.0, t[-1], 10.0):
-        m = (t[1:] >= a) & (t[1:] < a + 10.0)
-        if m.any():
-            perfil.append(float(d[m].sum() / dt[m].sum()))
-    return media, perfil
-
-
-def avisar_velocidad_guia(por_config_filas):
-    """Imprime la velocidad del guía de cada configuración y avisa si dos
-    configuraciones distintas tienen el mismo perfil (configuración no
-    aplicada) o si C1 (velocidad constante) fluctúa."""
-    print('\nVelocidad real del guía (verdad del terreno):')
-    perfiles = {}
-    for config, filas in sorted(por_config_filas.items()):
-        for ep in sorted({f['episodio'] for f in filas}, key=int):
-            media, perfil = velocidad_guia([f for f in filas if f['episodio'] == ep])
-            if media is None:
-                continue
-            perfiles.setdefault(config, []).append((media, perfil))
-            variacion = (max(perfil) - min(perfil)) if len(perfil) > 1 else 0.0
-            print(f'  {config} ep {ep}: media {media:.3f} m/s   por 10 s: '
-                  + ' '.join(f'{v:.2f}' for v in perfil)
-                  + f'   (rango {variacion:.2f})')
-    # Solo se compara C1 con las demás: C2 y C3 comparten rango (10-40) y su
-    # media puede coincidir aunque la configuración esté bien aplicada.
-    if 'C1' in perfiles:
-        a = 'C1'
-        for b in sorted(perfiles):
-            if b == a:
-                continue
-            ma, mb = perfiles[a][0][0], perfiles[b][0][0]
-            if abs(ma - mb) < 0.01:
-                print(f'  AVISO: {a} y {b} tienen la misma velocidad media del guía '
-                      f'({ma:.3f} vs {mb:.3f} m/s). ¿Se aplicó la configuración del guía?')
-    if 'C1' in perfiles:
-        perfil = perfiles['C1'][0][1]
-        if len(perfil) > 1 and max(perfil) - min(perfil) > 0.03:
-            print('  AVISO: en C1 (10-10, constante) la velocidad del guía fluctúa. '
-                  '¿Se aplicó la configuración del guía?')
-
-
-# =====================================================================
-# Métricas (siempre a partir de los CSV por paso)
-# =====================================================================
-
-def leer_csv(ruta):
-    with open(ruta, newline='') as f:
-        return list(csv.DictReader(f))
-
-
-def metricas(filas):
-    """Las cuatro métricas del anexo B sobre un conjunto de filas por paso."""
-    p = PROTOCOLO
-    episodios = {}
-    for fila in filas:
-        episodios.setdefault((fila['config'], fila['episodio']), []).append(fila)
-    desenlaces = {}
-    for pasos in episodios.values():
-        d = pasos[-1]['desenlace'] or 'sin_terminar'
-        desenlaces[d] = desenlaces.get(d, 0) + 1
-    n = len(episodios)
-    sep = np.array([float(f['separacion_m']) for f in filas]) if filas else np.zeros(0)
-    desv = np.abs(np.array([float(f['desviacion_deg']) for f in filas])) if filas else np.zeros(0)
-    completados = desenlaces.get('completado', 0)
-    return {
-        'episodios': n,
-        'completados': completados,
-        'pct_completados': 100.0 * completados / n if n else 0.0,
-        'desenlaces': desenlaces,
-        'pasos': len(filas),
-        'pct_en_banda': 100.0 * float(np.mean([f['en_banda'] == '1' for f in filas])) if filas else 0.0,
-        'separacion_media_m': float(sep.mean()) if len(sep) else float('nan'),
-        'desviacion_media_deg': float(desv.mean()) if len(desv) else float('nan'),
-        'pct_desv_bajo_umbral': 100.0 * float(np.mean(desv < p['DESV_UMBRAL_DEG'])) if len(desv) else 0.0,
-    }
-
-
-def comprobar_calibracion(filas):
-    """Correlación entre la desviación real y la posx del blob (anexo B.1).
-
-    Deben tener el mismo signo y estar muy correlacionadas: si no, la x del
-    blob no mide lo que se cree (calibración o convenio de signos).
-    """
-    pares = [(float(f['desviacion_deg']), float(f['blob_posx']))
-             for f in filas if f['visible'] == '1']
-    if len(pares) < 10:
-        return None
-    d, x = np.array(pares).T
-    if d.std() == 0 or x.std() == 0:
-        return None
-    return float(np.corrcoef(d, x)[0, 1]), len(pares)
-
-
-def imprimir_tabla(titulo, por_config, total):
-    print('\n' + titulo)
-    print('=' * len(titulo))
-    cab = (f'{"":8s}{"episodios":>10s}{"complet.":>10s}{"colisión":>10s}'
-           f'{"perd.dist":>10s}{"perd.vista":>11s}{"% banda":>9s}'
-           f'{"sep. media":>11s}{"|desv| °":>10s}{"% <15°":>8s}')
-    print(cab)
-    for nombre, m in [*por_config.items(), ('TOTAL', total)]:
-        d = m['desenlaces']
-        print(f'{nombre:8s}{m["episodios"]:>10d}'
-              f'{m["completados"]:>5d} ({m["pct_completados"]:3.0f}%)'
-              f'{d.get("colision", 0):>9d}{d.get("perdido_distancia", 0):>10d}'
-              f'{d.get("perdido_sin_ver", 0):>11d}{m["pct_en_banda"]:>8.1f}%'
-              f'{m["separacion_media_m"]:>9.3f} m{m["desviacion_media_deg"]:>10.1f}'
-              f'{m["pct_desv_bajo_umbral"]:>7.1f}%')
-    print('\nCausas: colisión (< 0,12 m), guía perdido por distancia (> 0,90 m) o '
-          'por pelota sin detectar > 3 s.')
-
-
-def resumen(etiqueta):
-    rutas = sorted(glob.glob(os.path.join(RUTA_LOGS, f'eval_{etiqueta}_C*.csv')))
-    if not rutas:
-        raise SystemExit(f'No hay registros {RUTA_LOGS}/eval_{etiqueta}_C*.csv')
-    por_config, filas_config, todas = {}, {}, []
-    for ruta in rutas:
-        filas = leer_csv(ruta)
-        if filas:
-            por_config[filas[0]['config']] = metricas(filas)
-            filas_config[filas[0]['config']] = filas
-            todas.extend(filas)
-    imprimir_tabla(f'ANEXO B — {etiqueta}  ({", ".join(rutas)})',
-                   por_config, metricas(todas))
-    avisar_velocidad_guia(filas_config)
-    cal = comprobar_calibracion(todas)
-    if cal is not None:
-        # Primera evaluación (PPO s0, C3): r = -0,91. El signo es negativo
-        # porque la x del blob crece hacia el lado contrario al de la
-        # desviación; lo que comprueba la calibración es que |r| sea alto.
-        print(f'Correlación desviación real <-> posx del blob: {cal[0]:+.3f} '
-              f'({cal[1]} pasos con pelota visible). |r| debe ser alto '
-              '(signo esperado: negativo).')
-
-
-# =====================================================================
-# Línea de órdenes
-# =====================================================================
-
 def main():
     a = argparse.ArgumentParser(
         description='Evaluador del protocolo común (anexo B), con verdad del terreno.')
@@ -510,17 +306,7 @@ def main():
                    help='episodios por configuración (el protocolo pide 1 de 120 s)')
     a.add_argument('--config', default=RUTA_CONFIG, help='configuración del entorno')
     a.add_argument('--detalle', action='store_true', help='una línea por paso')
-    a.add_argument('--resumen', action='store_true',
-                   help='sólo rehace las tablas a partir de los CSV guardados')
     args = a.parse_args()
-
-    if args.resumen:
-        etiqueta = args.etiqueta or (
-            'aleatorio' if args.algoritmo == 'aleatorio'
-            else os.path.basename(args.modelo or os.path.join(RUTA_MODELOS, f'p1_modelo_{args.algoritmo}_s{args.semilla}'))
-            .replace('.zip', '').replace('p1_modelo_', ''))
-        resumen(etiqueta)
-        return
 
     c = cargar_config(args.config)
     # pasos_max enorme: el fin del episodio lo decide el protocolo (120 s),
@@ -551,7 +337,8 @@ def main():
                 print(f'velocidad media real del guía en {config}: {media:.3f} m/s '
                       '(por 10 s: ' + ' '.join(f'{v:.2f}' for v in perfil) + ')')
 
-        resumen(etiqueta)
+        print(f'\nTablas y figuras del anexo B:\n'
+              f'    python3 p1_graficas_eval.py --etiquetas {etiqueta}')
     finally:
         if verdad is not None:
             verdad.cerrar()

@@ -54,7 +54,8 @@ README.md                 # Estructura e instrucciones de reproducción
 p1_robobo_env.py          # Entorno Gymnasium + calibrar()/comprobar()/importar_calibracion()
 p1_calibrar.py            # Caracterización del sensor
 p1_entrenar.py            # Entrenamiento / evaluación / gráficas SB3
-p1_evaluar.py             # Evaluador del anexo B (verdad del terreno por conexión directa a RoboboSim)
+p1_evaluar.py             # Evaluador del anexo B (verdad del terreno por conexión directa a RoboboSim; escribe los CSV)
+p1_graficas_eval.py       # Métricas, tablas y figuras del anexo B desde los CSV (sin ROS ni simulador)
 config/p1_config.json     # Configuración calibrada (RUTA_CONFIG)
 config/calibracion.json   # Medidas crudas de p1_calibrar.py (RUTA_CALIBRACION)
 modelos/                  # p1_modelo_<alg>_s<semilla>.zip (RUTA_MODELOS)
@@ -120,7 +121,7 @@ python3 p1_entrenar.py --entrenar --algoritmo {ppo,sac} --pasos 20000 --semilla 
 python3 p1_entrenar.py --evaluar  --algoritmo {ppo,sac} --semilla N
 python3 p1_entrenar.py --graficas --ventana 10 --ref <recompensa_aleatoria>
 python3 p1_evaluar.py --algoritmo {ppo,sac,aleatorio} --semilla N [--configs C1 C2 C3]
-python3 p1_evaluar.py --algoritmo ppo --semilla N --resumen   # tablas desde los CSV
+python3 p1_graficas_eval.py [--etiquetas ...] [--solo-tablas]   # métricas, tablas y figuras del anexo B
 ```
 
 ## Interfaz ROS 2 (namespace `/robobo/robot_0`)

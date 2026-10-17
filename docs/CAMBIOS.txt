@@ -420,3 +420,50 @@ Formato: [fecha] Título
   - Por qué: que el .zip de la entrega sea fácil de leer.
   - Efecto: ninguno en el comportamiento. Los scripts se siguen lanzando
             desde la raíz del proyecto; p1_logs/ y p1_checkpoints/ no cambian.
+
+
+-----------------------------------------------------------------
+[2026-10-17] 17. Nuevo p1_graficas_eval.py: métricas, tablas y figuras se
+             centralizan y p1_evaluar.py se queda sólo con la evaluación
+-----------------------------------------------------------------
+  - Qué:    se separan las dos responsabilidades:
+              * p1_evaluar.py SÓLO ejecuta episodios y escribe el registro
+                por paso (p1_logs/eval_<etiqueta>_<C>.csv).
+              * p1_graficas_eval.py (nuevo) es el ÚNICO sitio donde viven las
+                métricas del anexo B, las tablas y las figuras, y también el
+                PROTOCOLO, las CONFIGURACIONES y el esquema del CSV
+                (COLUMNAS) y RUTA_LOGS, que p1_evaluar.py importa desde ahí.
+            Genera, a partir de los CSV de evaluación:
+              fig_series_C1/C2/C3.png  separación y |desviación| vs tiempo,
+                                       con la banda 0,20-0,45 m y los umbrales
+                                       del protocolo marcados.
+              fig_desenlaces.png       barras apiladas por configuración y
+                                       causa de fin.
+              tabla_anexo_b.md / .csv  las 4 métricas del anexo B por
+                                       configuración y TOTAL + velocidad real
+                                       del guía + correlación desviación<->posx.
+              (consola)               la misma tabla y los avisos sobre la
+                                       velocidad del guía.
+            p1_graficas_eval.py NO necesita ROS 2, ni simulador, ni la
+            política: sólo lee los CSV (por eso define ahí las constantes
+            compartidas). Las métricas son exactamente las que antes imprimía
+            p1_evaluar.py --resumen, así que no cambian los números.
+  - Dónde:  p1_graficas_eval.py (nuevo); p1_evaluar.py: se eliminan
+            PROTOCOLO/CONFIGURACIONES/COLUMNAS/RUTA_LOGS, leer_csv, metricas,
+            velocidad_guia, comprobar_calibracion, avisar_velocidad_guia,
+            imprimir_tabla y resumen (ahora en p1_graficas_eval.py), y la
+            opción --resumen; se importa lo mínimo de p1_graficas_eval.
+            README.md y CLAUDE.md actualizados.
+  - Por qué: tener en un solo script todo lo que produce los resultados de la
+            memoria (tablas y figuras) y dejar el evaluador sin salida de
+            tablas; se evita duplicar el cálculo de métricas. La dependencia
+            va evaluar -> graficas (no al revés), de modo que el script de
+            figuras se puede ejecutar sin ROS/simulador.
+  - Efecto: los CSV y los números no cambian. Uso:
+              python3 p1_graficas_eval.py                 # todo p1_logs
+              python3 p1_graficas_eval.py --etiquetas sac_s0 --salida p1_graficas
+              python3 p1_graficas_eval.py --solo-tablas   # sin matplotlib
+              python3 p1_graficas_eval.py --sin-consola   # sin tabla en consola
+            Sustituye a `p1_evaluar.py --resumen` (opción eliminada).
+            Las figuras de ENTRENAMIENTO siguen en p1_entrenar.py:
+              python3 p1_entrenar.py --graficas --grupos sac_s --ventana 10
