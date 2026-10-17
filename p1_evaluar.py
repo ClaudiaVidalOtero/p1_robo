@@ -1,74 +1,31 @@
 #!/usr/bin/env python3
 """
-Práctica 1 — Evaluador del protocolo común (anexo B).
+Práctica 1 — Evaluador del protocolo del anexo B.
 
-Ejecuta una política (aprendida o aleatoria) en modo determinista sobre el
-entorno RoboboSeguidorEnv y la mide con la VERDAD DEL TERRENO del simulador,
-con los criterios de fallo del protocolo e independientemente de la
-recompensa y de las terminaciones propias del entorno.
+Ejecuta la política en modo determinista (o aleatoria) y la mide con la
+verdad del terreno de RoboboSim y los criterios de fallo del protocolo,
+independientes de la recompensa y de las terminaciones del entorno:
+    colisión      separación < 0,12 m
+    guía perdido  separación > 0,90 m o pelota sin detectar > 3 s seguidos
+    completado    120 s sin fallo
+La configuración del guía (C1, C2, C3) se cambia a mano en RoboboSim; el
+script espera a que se pulse Enter antes de cada una.
 
-Este script SÓLO ejecuta episodios: escribe un registro por paso y por
-configuración (p1_logs/eval_<etiqueta>_<C>.csv). Las métricas, las tablas y
-las figuras del anexo B se generan aparte con p1_graficas_eval.py, que es
-quien define PROTOCOLO, CONFIGURACIONES y COLUMNAS (esquema del CSV).
+Escribe un CSV por configuración, p1_logs/eval_<etiqueta>_<C>.csv, con las
+columnas COLUMNAS de p1_graficas_eval.py, que calcula las métricas, tablas y
+figuras a partir de ellos.
 
-----------------------------------------------------------------------
-PROTOCOLO (anexo B, sin modificaciones)
-----------------------------------------------------------------------
-  Configuraciones del guía (se ajustan A MANO en RoboboSim; el script espera
-  a que se pulse Enter antes de cada una):
+Verdad del terreno (sólo para medir; nunca entra en la observación): se lee
+por conexión directa con RoboboSim. En "Follow City" el seguidor es el robot
+0, el guía el objeto PATHFOLLOWROBOBO y la pelota el objeto CYLINDERMIDBALL;
+la separación se mide a la posición real de la pelota. Coordenadas en mm en
+el plano (x, z); rumbo = rotation.y en grados.
 
-      C1  Lenta constante   Crucero   10 - 10
-      C2  Contraste         Crucero   10 - 40
-      C3  Fluctuante        Variable  10 - 40
-
-  Cada episodio: reinicio de la simulación, seguidor parado, 120 s.
-  Fallos (se comprueban en cada paso):
-      colisión      separación < 0,12 m
-      guía perdido  separación > 0,90 m, o pelota sin detectar > 3 s seguidos
-  Salirse del carril NO es fallo (se juzga en los vídeos).
-
-  Separación = distancia entre el centro del seguidor y la pelota verde.
-  Banda objetivo 0,20 - 0,45 m.
-  Desviación = ángulo entre el rumbo del seguidor y la dirección a la pelota.
-
-----------------------------------------------------------------------
-VERDAD DEL TERRENO (sólo aquí; NUNCA en la observación ni en la política)
-----------------------------------------------------------------------
-  Se lee por una conexión directa con RoboboSim (librería robobosim, la misma
-  que usa el entorno para reiniciar la escena), no por el módulo sim del
-  puente: así el puente sigue lanzándose sólo con modules:="['blob']".
-
-  En el escenario "Follow City" (comprobado con la propia librería):
-      - el seguidor es el robot 0 (getRobotLocation(0)),
-      - el guía NO es un robot sino el objeto 'PATHFOLLOWROBOBO',
-      - la pelota verde es el objeto 'CYLINDERMIDBALL'.
-  Por eso la separación se mide a la posición REAL de la pelota en lugar de
-  desplazar la pose del guía 0,08 m hacia atrás: es la magnitud que define el
-  anexo ("referencia de todas las medidas") medida sin aproximación. En la
-  escena la pelota está a ~0,118 m del centro del guía, no a 0,08 m.
-
-  Coordenadas en mm, suelo en el plano (x, z), rumbo = rotation.y en grados.
-  Dirección de avance de un rumbo ry: (sin ry, cos ry) en (x, z) (comprobado:
-  el desplazamiento del guía coincide con su rotation.y).
-
-----------------------------------------------------------------------
-USO
-----------------------------------------------------------------------
-  Puente (en otra terminal):
-      ros2 run robobo_ros2 robobo_container --ros-args \\
-          -p ip:=host.docker.internal -p modules:="['blob']"
-
-  Política aprendida, las tres configuraciones seguidas:
-      python3 p1_evaluar.py --algoritmo ppo --semilla 0
-  Sólo una configuración:
-      python3 p1_evaluar.py --algoritmo ppo --semilla 0 --configs C3
-  Línea base aleatoria:
-      python3 p1_evaluar.py --algoritmo aleatorio
-
-  Registro por paso: p1_logs/eval_<etiqueta>_<C>.csv (uno por configuración).
-  Tablas y figuras (sin simulador, a partir de esos CSV):
-      python3 p1_graficas_eval.py
+USO (puente lanzado con modules:="['blob']")
+    python3 p1_evaluar.py --algoritmo sac --semilla 1
+    python3 p1_evaluar.py --algoritmo sac --semilla 2 --configs C3
+    python3 p1_evaluar.py --algoritmo aleatorio
+    python3 p1_graficas_eval.py
 """
 
 import argparse
@@ -107,8 +64,7 @@ OBJ_PELOTA = 'CYLINDERMIDBALL'
 # =====================================================================
 
 class VerdadTerreno:
-    """Pose del seguidor, del guía y de la pelota leídas de RoboboSim.
-    """
+    """Pose del seguidor, del guía y de la pelota leídas de RoboboSim."""
 
     def __init__(self, ip, espera_max_s=5.0, caducidad_s=2.0):
         self.ip = ip
@@ -138,6 +94,10 @@ class VerdadTerreno:
 
     def leer(self, nueva=False):
         """Devuelve (seguidor, guia, pelota) como tuplas (x, z, rumbo).
+
+        Con nueva=True espera a que lleguen posiciones renovadas (tras un
+        reinicio); si no, usa las últimas mientras no tengan más de
+        caducidad_s. Reconecta una vez si dejan de llegar.
         """
         if not nueva and self._conectado():
             ahora = self._crudo()
@@ -154,8 +114,8 @@ class VerdadTerreno:
             while time.time() - t0 < self.espera_max_s:
                 ahora = self._crudo()
                 completos = all(d is not None for d in ahora)
-                # La pelota se renueva siempre (~22 Hz). Del seguidor se
-                # espera una pose nueva, salvo que tarde más de 1 s.
+                # La pelota se renueva siempre (~22 Hz); el seguidor, si no
+                # se mueve, puede no renovarse: se espera como mucho 1 s.
                 renovados = (ahora[2] is not antes[2]
                              and (ahora[0] is not antes[0]
                                   or time.time() - t0 > 1.0))
@@ -171,7 +131,7 @@ class VerdadTerreno:
         raise RuntimeError(
             f'No se reciben posiciones de RoboboSim en {self.ip}:50505 '
             f'(faltan: {faltan or "ninguna, pero no se renuevan"}). '
-            '¿Está abierto el escenario Follow City?')
+            'Abre el escenario Follow City.')
 
     def cerrar(self):
         if self.sim is not None:
@@ -187,8 +147,9 @@ def _pose(d):
 def medir(seguidor, pelota):
     """Separación (m) y desviación (°) del seguidor respecto a la pelota.
 
-    Desviación con el convenio de rotation.y de RoboboSim. Comparada con la
-    posx del blob sale con signo CONTRARIO (correlación medida -0,91).
+    La dirección de avance de un rumbo ry es (sin ry, cos ry) en (x, z), así
+    que la dirección a la pelota es atan2(dx, dz). Con este convenio la
+    desviación tiene signo contrario a la posx del blob.
     """
     dx = pelota[0] - seguidor[0]
     dz = pelota[1] - seguidor[1]
@@ -229,17 +190,17 @@ def episodio(env, verdad, politica, config, num, escritor, args):
     p = PROTOCOLO
     obs, _ = env.reset()           # reinicio de la escena, seguidor parado
     t_reset = time.time()
-    verdad.leer(nueva=True)        # posiciones ya posteriores al reinicio
+    verdad.leer(nueva=True)        # posiciones posteriores al reinicio
 
     t0 = time.time()
-    t_visto = t0                   # instante de la última detección de la pelota
+    t_visto = t0                   # última vez que se detectó la pelota
     paso, desenlace = 0, None
     print(f'\n{config} episodio {num}: (reinicio en {t0 - t_reset:.1f} s)')
 
     while desenlace is None:
         accion = np.asarray(politica(obs), dtype=np.float32)
-        # Las terminaciones propias del entorno se REGISTRAN pero no cortan
-        # el episodio: el protocolo decide el fin con sus propios criterios.
+        # Las terminaciones del entorno se registran pero no cortan el
+        # episodio: el fin lo deciden los criterios del protocolo.
         obs, _, term_env, _, info = env.step(accion)
         seguidor, guia, pelota = verdad.leer()
         ahora = time.time()
@@ -309,8 +270,7 @@ def main():
     args = a.parse_args()
 
     c = cargar_config(args.config)
-    # pasos_max enorme: el fin del episodio lo decide el protocolo (120 s),
-    # no el truncado del entorno de entrenamiento.
+    # Sin truncado del entorno: el fin lo decide el protocolo (120 s).
     env = RoboboSeguidorEnv(pasos_max=10**9, usar_simulador=True,
                             ruta_config=args.config)
     verdad = None
@@ -325,7 +285,7 @@ def main():
             input(f'\nPon el guía en {config}: {CONFIGURACIONES[config]}\n'
                   'y pulsa Enter... ')
             ruta = os.path.join(RUTA_LOGS, f'eval_{etiqueta}_{config}.csv')
-            with open(ruta, 'w', newline='') as f:
+            with open(ruta, 'w', newline='', encoding='utf-8') as f:
                 escritor = csv.DictWriter(f, fieldnames=COLUMNAS)
                 escritor.writeheader()
                 for num in range(1, args.episodios + 1):

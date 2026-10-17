@@ -1,60 +1,30 @@
 #!/usr/bin/env python3
 """
-Calibración MANUAL de la pelota verde (sólo size y posx).
+Caracterización del sensor: size, x e y de la pelota verde a una distancia.
 
-Cada ejecución mide UNA distancia real, que das en el comando, y termina:
+Cada ejecución mide UNA distancia real (el robot no se desplaza):
+  1. Se coloca la pelota centrada a esa distancia y se pulsa Enter
+     ('v' muestra el size en vivo mientras se coloca).
+  2. Se toman N lecturas en reposo y se resume el size (mediana, std, x, y).
+  3. Barrido de posx: el robot gira a derecha e izquierda hasta perder la
+     pelota (o --max-pulsos), vuelve al centro y registra la x en cada pulso.
 
-    python3 p1_calibrar.py --distancia 0.25
+Cada ejecución AÑADE una entrada a config/calibracion.json:
+    {"distancia": 0.25, "fecha": ..., "lecturas": [{"etapa", "size", "posx", "y"}],
+     "media_de_blobsize": ...}
 
-El robot NO avanza ni retrocede (tilt fijo, 90 por defecto):
-
-  1. Pones la pelota a esa distancia y pulsas Enter ('v' = ver el size en
-     vivo mientras la colocas).
-  2. El script toma N lecturas en reposo, te dice el size (mediana, std,
-     x, y) y lo guarda en config/calibracion.json ligado a esa distancia.
-  3. Barrido de posx (ver abajo). Fin. Para otra distancia, vuelves a
-     lanzar el comando.
-
-Después de medir el size, SIN pedir nada más (la pelota ya está colocada),
-el robot hace el barrido: gira sobre sí mismo a derecha e izquierda hasta
-perder la pelota (o --max-pulsos), vuelve al centro y registra la x en
-cada pulso. --sin-barrido lo omite; --solo-barrido se salta la medida de
-size y hace sólo el barrido.
-
-El JSON (--json, por defecto config/calibracion.json) es una LISTA de medidas.
-Cada ejecución AÑADE una entrada al final, sin borrar las anteriores:
-
-    [
-      {
-        "distancia": 0.2,
-        "fecha": "2026-10-12 10:30:00",
-        "lecturas": [
-          {"etapa": "centro", "size": 55, "posx": 45}
-        ],
-        "media_de_blobsize": 57.5
-      },
-      {
-        "distancia": 0.25,
-        ...
-      }
-    ]
-
-Si el fichero existía con el formato antiguo (un único diccionario), se
-conserva como primera entrada de la lista.
-
-    python3 -c "from p1_robobo_env import importar_calibracion as i; i()"
+Después se vuelcan las constantes a la configuración con
+    python3 p1_entrenar.py --importar-calibracion
 
 Ejemplos:
-    python3 p1_calibrar.py --distancia 0.2          # size + barrido
+    python3 p1_calibrar.py --distancia 0.2
     python3 p1_calibrar.py --distancia 0.375 --sin-barrido
-    python3 p1_calibrar.py --distancia 0.375 --solo-barrido
     python3 p1_calibrar.py --distancia 0.5 --tilt 90 --n-medidas 30
 
-Nodo puente necesario:
-    ros2 run robobo_ros2 robobo_container --ros-args \
+Nodo puente (el módulo sim es opcional: da el yaw real del robot; sin él se
+integra la velocidad angular ordenada):
+    ros2 run robobo_ros2 robobo_container --ros-args \\
          -p ip:=host.docker.internal -p modules:="['blob','sim']"
-(el módulo sim es opcional: si está, el yaw sale de la pose del propio
-robot; si no, se integra la velocidad angular ordenada.)
 """
 
 import argparse
@@ -71,26 +41,29 @@ from rclpy.node import Node
 
 from p1_robobo_env import (
     COLOR_BLOB,
-    ESPERA_MAX_S,
-    GIRO_S,
     HAY_INTERFACES_BLOB,
-    HAY_INTERFACES_SIM,
-    NS_BASE,
-    NS_SIM,
-    NS_SMARTPHONE,
     RUTA_CALIBRACION,
-    W_GIRO,
     BlobArray,
     MoveTilt,
-    RobotLocation,
     SetActiveColorBlobs,
     dif_ang,
 )
 
+try:
+    from robobo_ros2_interfaces.msg import RobotLocation
+except ImportError:
+    RobotLocation = None
+
+NS_BASE = '/robobo/robot_0/base'
+NS_SIM = '/robobo/robot_0/sim'
+NS_SMARTPHONE = '/robobo/robot_0/smartphone'
+
 TILT_DEFECTO = 90.0
-N_MEDIDAS = 20       # lecturas por distancia (a 5 Hz son ~4 s)
-MAX_PULSOS = 12      # tope de pulsos de giro hacia cada lado
-OBLIGATORIAS = ('0.2', '0.25', '0.5')
+N_MEDIDAS = 20       # lecturas por distancia (~4 s a 5 Hz)
+MAX_PULSOS = 12      # pulsos de giro máximos hacia cada lado
+W_GIRO = 0.3         # rad/s de cada pulso de giro
+GIRO_S = 0.3         # duración de cada pulso (s)
+ESPERA_MAX_S = 3.0   # espera máxima por un mensaje de blobs
 
 
 def leer_distancia(texto):
@@ -105,16 +78,12 @@ def leer_distancia(texto):
 
 
 def cargar_previas(json_path):
-    """Devuelve la lista de medidas ya guardadas en json_path ([] si no hay).
-
-    - Fichero inexistente -> [].
-    - Formato antiguo (un dict suelto) -> [ese dict].
-    - Fichero ilegible -> se aparta como <json>.corrupto para no perderlo.
-    """
+    """Lista de medidas ya guardadas ([] si no hay; un fichero ilegible se
+    aparta como <json>.corrupto)."""
     if not os.path.exists(json_path):
         return []
     try:
-        with open(json_path) as fh:
+        with open(json_path, encoding='utf-8') as fh:
             datos = json.load(fh)
     except (OSError, ValueError):
         copia = json_path + '.corrupto'
@@ -135,7 +104,6 @@ def calibrar_manual(distancia, tilt=TILT_DEFECTO, n_medidas=N_MEDIDAS,
     if not HAY_INTERFACES_BLOB:
         raise RuntimeError('No se encuentran las interfaces de blobs '
                            '(robobo_ros2_interfaces). Revisa los imports.')
-    # JSON deliberadamente sencillo: una distancia y sus lecturas.
     resumen = {
         'distancia': float(distancia),
         'lecturas': [],
@@ -147,7 +115,7 @@ def calibrar_manual(distancia, tilt=TILT_DEFECTO, n_medidas=N_MEDIDAS,
     nodo = Node('p1_calibracion_manual')
 
     est = {'blob': None, 'n': 0, 'yaw': None}
-    giro = [0.0]                     # yaw integrado si no hay simulador
+    giro = [0.0]                     # yaw integrado si no hay módulo sim
 
     # ------------------------------------------------------------ ROS
     def cb_blobs(m):
@@ -158,7 +126,7 @@ def calibrar_manual(distancia, tilt=TILT_DEFECTO, n_medidas=N_MEDIDAS,
     nodo.create_subscription(
         BlobArray, NS_SMARTPHONE + '/color_blobs', cb_blobs, 1)
 
-    if HAY_INTERFACES_SIM:
+    if RobotLocation is not None:
         nodo.create_subscription(
             RobotLocation, NS_SIM + '/robot_location',
             lambda m: est.__setitem__('yaw', m.rotation.y), 1)
@@ -166,14 +134,13 @@ def calibrar_manual(distancia, tilt=TILT_DEFECTO, n_medidas=N_MEDIDAS,
     pub = nodo.create_publisher(Twist, NS_BASE + '/cmd_vel', 10)
 
     def servicio(tipo, nombre, **campos):
-        """Llama al servicio y falla explícitamente si no responde."""
+        """Llama al servicio y falla si no responde en 10 s."""
         cli = nodo.create_client(tipo, nombre)
         print(f'Esperando servicio {nombre}...', flush=True)
         if not cli.wait_for_service(timeout_sec=10.0):
             raise RuntimeError(
-                f'Servicio {nombre} no disponible. Comprueba que el nodo puente '
-                'robobo_container está activo y que los nombres de servicio '
-                'coinciden con tu versión de robobo_ros2.')
+                f'Servicio {nombre} no disponible: el nodo puente '
+                'robobo_container no está activo.')
         req = tipo.Request()
         for k, v in campos.items():
             setattr(req, k, v)
@@ -199,8 +166,8 @@ def calibrar_manual(distancia, tilt=TILT_DEFECTO, n_medidas=N_MEDIDAS,
             rclpy.spin_once(nodo, timeout_sec=0.05)
             if time.time() - t0 > ESPERA_MAX_S:
                 raise RuntimeError(
-                    f'No llegan blobs de {NS_SMARTPHONE}/color_blobs. ¿robobo_container '
-                    'con el módulo blob?')
+                    f'No llegan blobs de {NS_SMARTPHONE}/color_blobs: lanza '
+                    'robobo_container con el módulo blob.')
 
     def mover(v, w, segundos):
         msg = Twist()
@@ -222,8 +189,8 @@ def calibrar_manual(distancia, tilt=TILT_DEFECTO, n_medidas=N_MEDIDAS,
         return est['yaw'] if est['yaw'] is not None else giro[0]
 
     def leer():
-        """Un mensaje fresco -> dict con size, x, y, yaw."""
-        lectura_nueva(2)             # el primero puede ser anterior a la espera
+        """Lectura fresca -> dict con size, x, y, yaw."""
+        lectura_nueva(2)             # el primer mensaje puede ser anterior
         b = est['blob']
         return {'size': b.size if b else 0,
                 'x': b.x if b else None,
@@ -241,9 +208,9 @@ def calibrar_manual(distancia, tilt=TILT_DEFECTO, n_medidas=N_MEDIDAS,
 
         historial = cargar_previas(json_path)
         historial.append(resumen)
-        # Escritura atómica: si se corta a mitad, no se pierde lo anterior.
+        # Escritura atómica: un corte a mitad no borra las medidas anteriores.
         tmp = json_path + '.tmp'
-        with open(tmp, 'w') as fh:
+        with open(tmp, 'w', encoding='utf-8') as fh:
             json.dump(historial, fh, indent=2, ensure_ascii=False)
         os.replace(tmp, json_path)
         print(f'Medida añadida a {json_path} (total: {len(historial)}).')
@@ -294,18 +261,14 @@ def calibrar_manual(distancia, tilt=TILT_DEFECTO, n_medidas=N_MEDIDAS,
             return
 
     def etapa_tamanos():
-        print(f'\n=== SIZE a {distancia:.3f} m (el robot no se mueve) ==='
-              )
+        print(f'\n=== SIZE a {distancia:.3f} m (el robot no se mueve) ===')
         pedir_colocacion()
         while True:
             r = medir_size(n_medidas)
             if r['visibles']:
                 break
-            input('   No se ve la pelota. Recoloca y pulsa Enter para '
-                  'repetir... ')
-        # Las lecturas en reposo se guardan (etapa 'reposo') con su y: la
-        # altura de la pelota en la imagen distingue "pegado" (pelota cortada
-        # por abajo) de "lejos", que dan un size parecido.
+            input('   No se ve la pelota. Recoloca y pulsa Enter para repetir... ')
+        # Se guarda también la y: distingue "pegado" (pelota cortada) de "lejos".
         resumen['lecturas'].extend(
             {'etapa': 'reposo', 'size': d['size'], 'posx': d['x'], 'y': d['y']}
             for d in r['lecturas'])
@@ -316,13 +279,10 @@ def calibrar_manual(distancia, tilt=TILT_DEFECTO, n_medidas=N_MEDIDAS,
                   r['size_min'], r['size_max'], r['x_mediana'],
                   r['y_mediana'], r['visibles'], r['n_lecturas']))
 
-        # Conserva el resumen de tamaño en consola; el JSON sencillo guarda
-        # las lecturas de posx del barrido.
-
     # ------------------------------------------------------------ BARRIDO
     def etapa_barrido(ya_colocada):
         print(f'\n=== BARRIDO lateral de posx a {distancia:.3f} m (giro sobre el '
-              'sitio) ===' )
+              'sitio) ===')
         if not ya_colocada:
             pedir_colocacion()
         print('{:<8s}{:>10s}{:>10s}{:>10s}{:>9s}'.format(
@@ -343,10 +303,8 @@ def calibrar_manual(distancia, tilt=TILT_DEFECTO, n_medidas=N_MEDIDAS,
         c0 = leer()
         registrar('centro', c0)
         if c0['size'] == 0:
-            print('No se detecta el blob en el centro; no se inicia el giro '
-                  'para evitar barrer sin referencia. Comprueba que la pelota '
-                  'está visible, que el color está activado y que el tilt '
-                  'se ha colocado correctamente. Repite la ejecución.')
+            print('No se detecta el blob en el centro: no se hace el barrido. '
+                  'Recoloca la pelota y repite la ejecución.')
             return
         centros, lados, vis_all = [c0], {}, [c0]
 
@@ -395,10 +353,8 @@ def calibrar_manual(distancia, tilt=TILT_DEFECTO, n_medidas=N_MEDIDAS,
 
     # ------------------------------------------------------------ main
     try:
-        # Coloca primero la cámara en el tilt solicitado (90° por defecto)
-        # y espera a que termine antes de activar/buscar blobs.
-        print(f'Solicitando tilt {tilt:.1f}° antes de activar/buscar blobs...'
-              , flush=True)
+        # Primero el tilt (el mismo que usará el entorno) y luego los blobs.
+        print(f'Solicitando tilt {tilt:.1f}°...', flush=True)
         servicio(MoveTilt, NS_BASE + '/move_tilt',
                  angle=float(tilt), speed=30.0)
         time.sleep(2.0)
@@ -414,14 +370,13 @@ def calibrar_manual(distancia, tilt=TILT_DEFECTO, n_medidas=N_MEDIDAS,
         if barrido:
             etapa_barrido(ya_colocada=tamanos)   # guarda al terminar
         elif tamanos:
-            guardar()   
+            guardar()
         print('\nListo. Siguiente: otra distancia, o importar con\n'
-              '  python3 -c "from p1_robobo_env import importar_calibracion '
-              'as i; i()"')
+              '  python3 p1_entrenar.py --importar-calibracion')
     except KeyboardInterrupt:
         print(f'\nInterrumpido (lo ya guardado en {json_path} se conserva).')
     finally:
-        # Parada de seguridad best-effort: no debe ocultar el error original.
+        # Parada de seguridad; no debe ocultar el error original.
         with contextlib.suppress(Exception):
             mover(0.0, 0.0, 0.1)
         nodo.destroy_node()

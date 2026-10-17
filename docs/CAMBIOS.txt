@@ -467,3 +467,73 @@ Formato: [fecha] Título
             Sustituye a `p1_evaluar.py --resumen` (opción eliminada).
             Las figuras de ENTRENAMIENTO siguen en p1_entrenar.py:
               python3 p1_entrenar.py --graficas --grupos sac_s --ventana 10
+
+
+-----------------------------------------------------------------
+[2026-10-17] 18. Revisión de las gráficas frente al enunciado y anexo B
+-----------------------------------------------------------------
+  - Qué:    p1_graficas_eval.py:
+              * la política 'aleatorio' ya no entra por defecto en la
+                comparativa (sólo con --etiquetas aleatorio).
+              * nueva columna "Otra" (otra terminación o episodio sin
+                desenlace): antes esos episodios no aparecían en la tabla y
+                los desenlaces no sumaban el nº de episodios (B.3).
+              * aviso de episodios sin desenlace (evaluación abortada).
+              * --final C1=et C2=et C3=et: tabla_final.md/.csv y
+                fig_final_series.png con la política elegida por
+                configuración (apartado 3 de la memoria).
+              * fig_calibracion.png: desviación real vs. posx del blob con
+                ajuste lineal y r (B.1).
+              * fig_desenlaces.png: la leyenda sólo mostraba las causas de
+                la primera política; ahora muestra todas. Eje Y entero.
+              * lectura/escritura de CSV en UTF-8 explícito.
+            p1_entrenar.py --graficas: opción --sin-ref; el eje de duración
+            indica los segundos por paso medidos (Monitor) y se imprimen
+            para el pie.
+  - Por qué: cumplir B.3/B.4 (todas las causas), B.1 (comparar desviación y
+            x del blob), apartado 8.1 (tabla de la solución final y duración
+            con la duración de un paso).
+  - Efecto: las métricas existentes no cambian; sac_s2/C3 aparece como
+            "otra" (CSV abortado a los 16,5 s, hay que repetirlo).
+
+
+-----------------------------------------------------------------
+[2026-10-17] 19. Se elimina el experimento PPO crucero 18-30
+-----------------------------------------------------------------
+  - Qué:    se borran p1_logs/eval_ppo_crucero1830_s0_C1/C2/C3.csv,
+            p1_logs/monitor_ppo_crucero1830_s0.monitor.csv y
+            p1_logs/PPO_3/ (su TensorBoard). Se quitan sus filas y
+            menciones de docs/memoria.txt, docs/notas_RIA_P1.md, README.md
+            y de los ejemplos de p1_graficas_eval.py, y se regeneran
+            p1_graficas/tabla_anexo_b.md/.csv.
+  - Por qué: experimento exploratorio con la banda de recompensa antigua y
+            sin modelo ni configuración en el directorio: no reproducible.
+  - Efecto: no entra en tablas, figuras ni curvas de aprendizaje.
+
+
+-----------------------------------------------------------------
+[2026-10-18] 20. Revisión de comentarios, conexiones y código sin uso
+-----------------------------------------------------------------
+  - Qué:    * p1_robobo_env.py: se elimina el reinicio por el módulo sim del
+              puente (RESET_DIRECTO=false), la colocación del seguidor
+              (POS_INICIO), la suscripción a sim/robot_location, info
+              'pose_sim' y los atributos _v/_w. El reinicio es siempre por
+              conexión directa. Se quitan RESET_DIRECTO y POS_INICIO de
+              config/p1_config.json.
+            * Constantes que sólo usa p1_calibrar.py (NS_*, W_GIRO, GIRO_S,
+              ESPERA_MAX_S) se mueven a ese archivo.
+            * p1_entrenar.py importa RUTA_LOGS de p1_graficas_eval.py (una
+              sola definición). --normalizacion muestra posy y el vector de
+              "no visible" correcto.
+            * Error corregido: el mensaje de "no llegan blobs" al crear el
+              entorno nunca se mostraba (inicial=True no se pasaba).
+            * Comentarios y docstrings reescritos: sólo explican el código;
+              se corrigen dos incorrectos (cota de la recompensa por paso y
+              signo esperado de la correlación desviación-posx).
+            * Apertura de ficheros con encoding='utf-8' en todos los scripts.
+  - Por qué: código muerto con la configuración actual y comentarios largos
+            o desactualizados.
+  - Efecto: mismo comportamiento con la configuración actual. Comprobado:
+            pyflakes sin avisos, imports cruzados, prueba p1_evaluar.episodio
+            -> CSV -> p1_graficas_eval (tablas y 6 figuras) y mismas tablas y
+            curvas con los datos reales.

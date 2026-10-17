@@ -1,36 +1,30 @@
 #!/usr/bin/env python3
 """
-Práctica 1 — Métricas, tablas y figuras de la EVALUACIÓN (anexo B).
+Práctica 1 — Métricas, tablas y figuras del anexo B.
 
-Único sitio donde viven las métricas del anexo B, las tablas y las figuras.
-p1_evaluar.py sólo ejecuta episodios y escribe los registros por paso
-(p1_logs/eval_<etiqueta>_<C>.csv); aquí se leen esos CSV y se produce:
+Lee los CSV por paso que escribe p1_evaluar.py (p1_logs/eval_<etiqueta>_<C>.csv)
+y genera, sin ROS 2 ni simulador:
+    fig_series_C1/C2/C3.png  separación y |desviación| frente al tiempo
+    fig_desenlaces.png       desenlaces por configuración y causa de fin
+    fig_calibracion.png      desviación real frente a la x del blob (B.1)
+    tabla_anexo_b.md/.csv    las 4 métricas por configuración y TOTAL
+    tabla_final.md/.csv, fig_final_series.png   política elegida (--final)
 
-  1. fig_series_C1/C2/C3.png  separación y |desviación| frente al tiempo, con
-                              la banda objetivo 0,20-0,45 m y los umbrales del
-                              protocolo marcados (una línea por política).
-  2. fig_desenlaces.png       barras apiladas de desenlaces por configuración
-                              y causa de fin (una figura por política).
-  3. tabla_anexo_b.md/.csv    las 4 métricas del anexo B (por configuración y
-                              TOTAL) + velocidad real del guía + correlación
-                              desviación <-> posx.
-  4. (consola) la misma tabla y los avisos sobre la velocidad del guía.
-
-No necesita ROS 2, ni simulador, ni la política: trabaja sólo con los CSV.
-Por eso este módulo define el PROTOCOLO y el esquema del CSV (COLUMNAS), que
-p1_evaluar.py importa desde aquí.
+Define PROTOCOLO, CONFIGURACIONES y COLUMNAS, que importa p1_evaluar.py.
+La etiqueta 'aleatorio' sólo se incluye si se pide con --etiquetas.
 
 USO
     python3 p1_graficas_eval.py                          # todo lo de p1_logs
     python3 p1_graficas_eval.py --etiquetas sac_s0 --salida p1_graficas
-    python3 p1_graficas_eval.py --etiquetas sac_s0 aleatorio
+    python3 p1_graficas_eval.py --final C1=sac_s1 C2=sac_s2 C3=sac_s1
     python3 p1_graficas_eval.py --solo-tablas            # sin matplotlib
     python3 p1_graficas_eval.py --sin-consola            # sin tabla en consola
 
 Salida en --salida (por defecto p1_graficas/):
     fig_series_C1.png, fig_series_C2.png, fig_series_C3.png
-    fig_desenlaces.png
+    fig_desenlaces.png, fig_calibracion.png
     tabla_anexo_b.md, tabla_anexo_b.csv
+    tabla_final.md, tabla_final.csv, fig_final_series.png   (con --final)
 """
 
 import argparse
@@ -43,8 +37,7 @@ import numpy as np
 
 RUTA_LOGS = 'p1_logs'
 
-# Parámetros del protocolo (anexo B). Comunes a todos los grupos y ajenos a la
-# calibración: por eso no están en p1_config.json.
+# Parámetros del anexo B (no dependen de la calibración).
 PROTOCOLO = {
     'DURACION_S': 120.0,
     'BANDA_MIN_M': 0.20,
@@ -73,24 +66,26 @@ COLUMNAS = ['config', 'episodio', 'paso', 't',
 # Orden fijo de las configuraciones del anexo B.
 ORDEN_CONFIG = ['C1', 'C2', 'C3']
 
-# Causas de fin, en el orden en que se apilan. 'sin_terminar' es un episodio
-# cuyo CSV no tiene desenlace (p. ej. se abortó la ejecución).
+# Causas de fin de B.3 más 'otra' (otra terminación o CSV sin desenlace).
 CAUSAS = ['completado', 'colision', 'perdido_distancia',
-          'perdido_sin_ver', 'sin_terminar']
+          'perdido_sin_ver', 'otra']
 ETIQUETA_CAUSA = {
     'completado': 'completado',
     'colision': 'colisión',
     'perdido_distancia': 'guía perdido (distancia)',
     'perdido_sin_ver': 'guía perdido (vista)',
-    'sin_terminar': 'sin terminar',
+    'otra': 'otra causa / sin terminar',
 }
 COLOR_CAUSA = {
     'completado': '#43a047',
     'colision': '#e53935',
     'perdido_distancia': '#fb8c00',
     'perdido_sin_ver': '#fdd835',
-    'sin_terminar': '#9e9e9e',
+    'otra': '#9e9e9e',
 }
+
+# Etiquetas que no entran en la comparativa salvo que se pidan con --etiquetas.
+EXCLUIDAS = {'aleatorio'}
 
 PATRON = re.compile(r'^eval_(?P<et>.+)_(?P<cfg>C[123])\.csv$')
 
@@ -100,7 +95,7 @@ PATRON = re.compile(r'^eval_(?P<et>.+)_(?P<cfg>C[123])\.csv$')
 # =====================================================================
 
 def leer_csv(ruta):
-    with open(ruta, newline='') as f:
+    with open(ruta, newline='', encoding='utf-8') as f:
         return list(csv.DictReader(f))
 
 
@@ -130,7 +125,9 @@ def metricas(filas):
         episodios.setdefault((fila['config'], fila['episodio']), []).append(fila)
     desenlaces = {}
     for pasos in episodios.values():
-        d = pasos[-1]['desenlace'] or 'sin_terminar'
+        d = pasos[-1]['desenlace']
+        if d not in CAUSAS:
+            d = 'otra'      # otra terminación o episodio sin desenlace
         desenlaces[d] = desenlaces.get(d, 0) + 1
     n = len(episodios)
     sep = np.array([float(f['separacion_m']) for f in filas]) if filas else np.zeros(0)
@@ -177,10 +174,10 @@ def velocidad_guia(filas):
 
 
 def comprobar_calibracion(filas):
-    """Correlación entre la desviación real y la posx del blob (anexo B.1).
+    """(r, nº de pasos) entre la desviación real y la posx del blob (B.1).
 
-    Deben tener el mismo signo y estar muy correlacionadas: si no, la x del
-    blob no mide lo que se cree (calibración o convenio de signos).
+    Con una buena calibración |r| es alto; el signo es negativo por el
+    convenio de ángulos del simulador.
     """
     pares = [(float(f['desviacion_deg']), float(f['blob_posx']))
              for f in filas if f['visible'] == '1']
@@ -190,6 +187,21 @@ def comprobar_calibracion(filas):
     if d.std() == 0 or x.std() == 0:
         return None
     return float(np.corrcoef(d, x)[0, 1]), len(pares)
+
+
+def episodios_incompletos(datos):
+    """Episodios cuyo CSV acaba sin desenlace (evaluación abortada)."""
+    avisos = []
+    for et, por_config in datos.items():
+        for cfg, filas in por_config.items():
+            episodios = {}
+            for fila in filas:
+                episodios.setdefault(fila['episodio'], []).append(fila)
+            for ep, pasos in episodios.items():
+                if not pasos[-1]['desenlace']:
+                    avisos.append(f'{et} / {cfg} ep {ep}: sin desenlace, '
+                                  f'acaba a los {float(pasos[-1]["t"]):.1f} s')
+    return avisos
 
 
 # =====================================================================
@@ -207,6 +219,7 @@ def _fila_tabla(nombre, m):
         'colision': d.get('colision', 0),
         'perdido_distancia': d.get('perdido_distancia', 0),
         'perdido_sin_ver': d.get('perdido_sin_ver', 0),
+        'otra': d.get('otra', 0),
         'pct_en_banda': round(m['pct_en_banda'], 1),
         'separacion_media_m': round(m['separacion_media_m'], 3),
         'desviacion_media_deg': round(m['desviacion_media_deg'], 1),
@@ -216,7 +229,7 @@ def _fila_tabla(nombre, m):
 
 CABECERA_CSV = ['etiqueta', 'config', 'episodios', 'completados',
                 'pct_completados', 'colision', 'perdido_distancia',
-                'perdido_sin_ver', 'pct_en_banda', 'separacion_media_m',
+                'perdido_sin_ver', 'otra', 'pct_en_banda', 'separacion_media_m',
                 'desviacion_media_deg', 'pct_desv_bajo_umbral']
 
 
@@ -225,24 +238,25 @@ def imprimir_tabla(etiqueta, filas):
     print('\n' + titulo)
     print('=' * len(titulo))
     print(f'{"":8s}{"episodios":>10s}{"complet.":>10s}{"colisión":>10s}'
-          f'{"perd.dist":>10s}{"perd.vista":>11s}{"% banda":>9s}'
+          f'{"perd.dist":>10s}{"perd.vista":>11s}{"otra":>6s}{"% banda":>9s}'
           f'{"sep. media":>11s}{"|desv| °":>10s}{"% <15°":>8s}')
     for nombre, m in filas.items():
         d = m['desenlaces']
         print(f'{nombre:8s}{m["episodios"]:>10d}'
               f'{m["completados"]:>5d} ({m["pct_completados"]:3.0f}%)'
               f'{d.get("colision", 0):>9d}{d.get("perdido_distancia", 0):>10d}'
-              f'{d.get("perdido_sin_ver", 0):>11d}{m["pct_en_banda"]:>8.1f}%'
+              f'{d.get("perdido_sin_ver", 0):>11d}{d.get("otra", 0):>6d}'
+              f'{m["pct_en_banda"]:>8.1f}%'
               f'{m["separacion_media_m"]:>9.3f} m{m["desviacion_media_deg"]:>10.1f}'
               f'{m["pct_desv_bajo_umbral"]:>7.1f}%')
     print('\nCausas: colisión (< 0,12 m), guía perdido por distancia (> 0,90 m) '
-          'o por pelota sin detectar > 3 s.')
+          'o por pelota sin detectar > 3 s; otra = otra terminación o '
+          'episodio sin terminar (no cuenta como completado).')
 
 
 def avisar_velocidad_guia(por_config_filas):
-    """Velocidad del guía por configuración; avisa si dos configuraciones
-    distintas tienen el mismo perfil (configuración no aplicada) o si C1
-    (velocidad constante) fluctúa."""
+    """Velocidad real del guía por episodio; avisa si parece que no se aplicó
+    la configuración del guía (C1 igual que otra, o C1 no constante)."""
     print('\nVelocidad real del guía (verdad del terreno):')
     perfiles = {}
     for config, filas in sorted(por_config_filas.items()):
@@ -255,8 +269,7 @@ def avisar_velocidad_guia(por_config_filas):
             print(f'  {config} ep {ep}: media {media:.3f} m/s   por 10 s: '
                   + ' '.join(f'{v:.2f}' for v in perfil)
                   + f'   (rango {variacion:.2f})')
-    # Solo se compara C1 con las demás: C2 y C3 comparten rango (10-40) y su
-    # media puede coincidir aunque la configuración esté bien aplicada.
+    # Sólo se compara C1: C2 y C3 comparten rango y pueden tener la misma media.
     if 'C1' in perfiles:
         for b in sorted(perfiles):
             if b == 'C1':
@@ -275,38 +288,47 @@ def imprimir_consola(etiqueta, por_config):
     avisar_velocidad_guia(por_config)
     cal = comprobar_calibracion([f for v in por_config.values() for f in v])
     if cal is not None:
-        # El signo es negativo porque la x del blob crece hacia el lado
-        # contrario al de la desviación; lo que comprueba la calibración es
-        # que |r| sea alto.
         print(f'Correlación desviación real <-> posx del blob: {cal[0]:+.3f} '
               f'({cal[1]} pasos con pelota visible). |r| debe ser alto '
               '(signo esperado: negativo).')
 
 
+CABECERA_MD = [
+    '| Etiqueta | Config | Episodios | Completados | Colisión | '
+    'Perd. dist. | Perd. vista | Otra | % en banda | Sep. media (m) | '
+    '\\|desv\\| (°) | % <15° |',
+    '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+]
+
+
+def _linea_md(et, v):
+    return (f"| {et} | {v['config']} | {v['episodios']} | "
+            f"{v['completados']} ({v['pct_completados']:.0f}%) | "
+            f"{v['colision']} | {v['perdido_distancia']} | "
+            f"{v['perdido_sin_ver']} | {v['otra']} | {v['pct_en_banda']:.1f}% | "
+            f"{v['separacion_media_m']:.3f} | "
+            f"{v['desviacion_media_deg']:.1f} | "
+            f"{v['pct_desv_bajo_umbral']:.1f}% |")
+
+
+def _escribir_csv(ruta, filas_csv):
+    with open(ruta, 'w', newline='', encoding='utf-8') as f:
+        w = csv.DictWriter(f, fieldnames=CABECERA_CSV)
+        w.writeheader()
+        w.writerows(filas_csv)
+
+
 def escribir_tablas(datos, dir_salida):
     """Tabla del anexo B (todas las etiquetas) en Markdown y CSV."""
     filas_csv = []
-    lineas = [
-        '| Etiqueta | Config | Episodios | Completados | Colisión | '
-        'Perd. dist. | Perd. vista | % en banda | Sep. media (m) | '
-        '\\|desv\\| (°) | % <15° |',
-        '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
-    ]
+    lineas = list(CABECERA_MD)
     bloque_vel, bloque_cor = [], []
     for et, por_config in datos.items():
         for nombre, m in metricas_etiqueta(por_config).items():
             v = _fila_tabla(nombre, m)
             filas_csv.append({'etiqueta': et, **v})
-            lineas.append(
-                f"| {et} | {v['config']} | {v['episodios']} | "
-                f"{v['completados']} ({v['pct_completados']:.0f}%) | "
-                f"{v['colision']} | {v['perdido_distancia']} | "
-                f"{v['perdido_sin_ver']} | {v['pct_en_banda']:.1f}% | "
-                f"{v['separacion_media_m']:.3f} | "
-                f"{v['desviacion_media_deg']:.1f} | "
-                f"{v['pct_desv_bajo_umbral']:.1f}% |")
+            lineas.append(_linea_md(et, v))
 
-        # Velocidad real del guía (detecta una configuración mal aplicada).
         for cfg, ss in sorted(por_config.items(),
                               key=lambda kv: ORDEN_CONFIG.index(kv[0])):
             media, perfil = velocidad_guia(ss)
@@ -315,8 +337,7 @@ def escribir_tablas(datos, dir_salida):
                     f'- {et} / {cfg}: {media:.3f} m/s   (por 10 s: '
                     + ' '.join(f'{x:.2f}' for x in perfil) + ')')
 
-        # Correlación desviación real <-> posx del blob (comprueba calibración).
-        cal = comprobar_calibracion([f for v in por_config.values() for f in v])
+        cal =comprobar_calibracion([f for v in por_config.values() for f in v])
         if cal is not None:
             bloque_cor.append(
                 f'- {et}: r = {cal[0]:+.3f} ({cal[1]} pasos con pelota '
@@ -325,41 +346,76 @@ def escribir_tablas(datos, dir_salida):
     ruta_md = os.path.join(dir_salida, 'tabla_anexo_b.md')
     with open(ruta_md, 'w', encoding='utf-8') as f:
         f.write('# Tabla del anexo B (evaluación)\n\n')
-        f.write('Separación en banda 0,20-0,45 m; colisión < 0,12 m; guía '
-                'perdido > 0,90 m o pelota sin detectar > 3 s; '
-                '|desviación| deseada < 15°.\n\n')
+        f.write(LEYENDA_MD)
         f.write('\n'.join(lineas) + '\n')
         f.write('\n## Velocidad real del guía (verdad del terreno)\n\n')
         f.write('\n'.join(bloque_vel) + '\n')
         if bloque_cor:
             f.write('\n## Correlación desviación <-> posx del blob\n\n')
             f.write('\n'.join(bloque_cor) + '\n')
+        incompletos = episodios_incompletos(datos)
+        if incompletos:
+            f.write('\n## Episodios sin terminar (repetir la evaluación)\n\n')
+            f.write('\n'.join(f'- {x}' for x in incompletos) + '\n')
 
     ruta_csv = os.path.join(dir_salida, 'tabla_anexo_b.csv')
-    with open(ruta_csv, 'w', newline='', encoding='utf-8') as f:
-        w = csv.DictWriter(f, fieldnames=CABECERA_CSV)
-        w.writeheader()
-        w.writerows(filas_csv)
+    _escribir_csv(ruta_csv, filas_csv)
 
     print(f'Tabla Markdown: {ruta_md}')
     print(f'Tabla CSV:      {ruta_csv}')
+
+
+LEYENDA_MD = ('Separación en banda 0,20-0,45 m; colisión < 0,12 m; guía '
+              'perdido > 0,90 m o pelota sin detectar > 3 s; '
+              '|desviación| deseada < 15°. "Otra" = otra terminación o '
+              'episodio sin terminar (no cuenta como completado).\n\n')
+
+
+def parsear_final(pares, datos):
+    """'C1=sac_s1 C2=...' -> {config: etiqueta}, comprobando que existan."""
+    final = {}
+    for par in pares:
+        cfg, sep, et = par.partition('=')
+        if not sep or cfg not in CONFIGURACIONES:
+            raise SystemExit(f'--final: "{par}" no tiene la forma C1=etiqueta')
+        if et not in datos or cfg not in datos[et]:
+            raise SystemExit(f'--final: no existe p1_logs/eval_{et}_{cfg}.csv')
+        final[cfg] = et
+    return dict(sorted(final.items(), key=lambda kv: ORDEN_CONFIG.index(kv[0])))
+
+
+def escribir_tabla_final(datos, final, dir_salida):
+    """Tabla de la solución final: una política por configuración y su TOTAL."""
+    filas_csv, lineas = [], list(CABECERA_MD)
+    todas = []
+    for cfg, et in final.items():
+        v = _fila_tabla(cfg, metricas(datos[et][cfg]))
+        filas_csv.append({'etiqueta': et, **v})
+        lineas.append(_linea_md(et, v))
+        todas.extend(datos[et][cfg])
+    v = _fila_tabla('TOTAL', metricas(todas))
+    filas_csv.append({'etiqueta': 'final', **v})
+    lineas.append(_linea_md('final', v))
+
+    ruta_md = os.path.join(dir_salida, 'tabla_final.md')
+    with open(ruta_md, 'w', encoding='utf-8') as f:
+        f.write('# Tabla del anexo B — solución final por configuración\n\n')
+        f.write(LEYENDA_MD)
+        f.write('\n'.join(lineas) + '\n')
+    ruta_csv = os.path.join(dir_salida, 'tabla_final.csv')
+    _escribir_csv(ruta_csv, filas_csv)
+    print(f'Tabla final:    {ruta_md}')
+    print(f'Tabla final:    {ruta_csv}')
 
 
 # =====================================================================
 # Figuras
 # =====================================================================
 
-def figura_series(datos, dir_salida, cfg):
-    """Separación y |desviación| frente al tiempo, por configuración.
-
-    Una línea por etiqueta (política); la banda objetivo y los umbrales del
-    protocolo quedan marcados como referencia.
-    """
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-
-    fig, (ax_s, ax_d) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
+def _dibujar_series(ax_s, ax_d, series):
+    """Separación (ax_s) y |desviación| (ax_d) frente al tiempo, con la banda y
+    los umbrales del protocolo. series = [(etiqueta, filas)]. Devuelve si se
+    dibujó algo."""
     ax_s.axhspan(PROTOCOLO['BANDA_MIN_M'], PROTOCOLO['BANDA_MAX_M'],
                  color='#43a047', alpha=0.12, label='banda objetivo')
     ax_s.axhline(PROTOCOLO['COLISION_M'], color='#e53935', ls=':', lw=1,
@@ -368,13 +424,10 @@ def figura_series(datos, dir_salida, cfg):
                  label='guía perdido 0,90 m')
     ax_d.axhline(PROTOCOLO['DESV_UMBRAL_DEG'], color='0.4', ls=':', lw=1,
                  label='15°')
-
     dibujadas = False
-    for et, por_config in datos.items():
-        if cfg not in por_config:
-            continue
+    for et, filas in series:
         episodios = {}
-        for fila in por_config[cfg]:
+        for fila in filas:
             episodios.setdefault(fila['episodio'], []).append(fila)
         for i, (_, fs) in enumerate(sorted(episodios.items(), key=lambda kv: int(kv[0]))):
             t = [float(x['t']) for x in fs]
@@ -384,17 +437,29 @@ def figura_series(datos, dir_salida, cfg):
             ax_s.plot(t, s, lw=1.4, label=etiqueta)
             ax_d.plot(t, d, lw=1.4, label=etiqueta)
             dibujadas = True
+    ax_s.set_ylabel('separación (m)')
+    ax_d.set_ylabel('|desviación| (°)')
+    ax_d.set_xlabel('tiempo (s)')
+    for ax in (ax_s, ax_d):
+        ax.set_xlim(0, PROTOCOLO['DURACION_S'])
+        ax.grid(alpha=0.3)
+    return dibujadas
+
+
+def figura_series(datos, dir_salida, cfg):
+    """Series de todas las políticas en la configuración cfg."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    fig, (ax_s, ax_d) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
+    dibujadas = _dibujar_series(ax_s, ax_d, [(et, v[cfg]) for et, v in datos.items()
+                                             if cfg in v])
     if not dibujadas:
         plt.close(fig)
         return None
-
-    ax_s.set_ylabel('separación (m)')
     ax_s.set_title(f'Configuración {cfg}: {CONFIGURACIONES[cfg]}')
-    ax_d.set_ylabel('|desviación| (°)')
-    ax_d.set_xlabel('tiempo (s)')
     ax_s.legend(fontsize=8, loc='best', ncol=2)
-    for ax in (ax_s, ax_d):
-        ax.grid(alpha=0.3)
     fig.tight_layout()
     salida = os.path.join(dir_salida, f'fig_series_{cfg}.png')
     fig.savefig(salida, dpi=150)
@@ -427,12 +492,75 @@ def figura_desenlaces(datos, dir_salida):
         ax.set_xlabel('configuración')
         ax.set_ylabel('episodios')
         ax.grid(alpha=0.3, axis='y')
-    # Leyenda común (una vez).
-    asas, textos = ejes[0][0].get_legend_handles_labels()
-    fig.legend(asas, textos, loc='upper center', ncol=len(CAUSAS),
+        ax.yaxis.get_major_locator().set_params(integer=True)
+    # Leyenda común con todas las causas.
+    from matplotlib.patches import Patch
+    asas = [Patch(color=COLOR_CAUSA[c], label=ETIQUETA_CAUSA[c]) for c in CAUSAS]
+    fig.legend(handles=asas, loc='upper center', ncol=len(CAUSAS),
                fontsize=8, frameon=False)
     fig.tight_layout(rect=(0, 0, 1, 0.9))
     salida = os.path.join(dir_salida, 'fig_desenlaces.png')
+    fig.savefig(salida, dpi=150)
+    plt.close(fig)
+    print(f'Figura: {salida}')
+
+
+def figura_calibracion(datos, dir_salida):
+    """Desviación real frente a la x del blob en los pasos con la pelota
+    visible, con su ajuste lineal y r (B.1)."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(6, 4.5))
+    todos = []
+    for et, por_config in datos.items():
+        pares = [(float(f['desviacion_deg']), float(f['blob_posx']))
+                 for v in por_config.values() for f in v if f['visible'] == '1']
+        if not pares:
+            continue
+        d, x = np.array(pares).T
+        ax.scatter(d, x, s=6, alpha=0.4, label=et)
+        todos.extend(pares)
+    if len(todos) < 10:
+        plt.close(fig)
+        return None
+    d, x = np.array(todos).T
+    pend, orig = np.polyfit(d, x, 1)
+    r = np.corrcoef(d, x)[0, 1]
+    xs = np.linspace(d.min(), d.max(), 2)
+    ax.plot(xs, pend * xs + orig, color='k', lw=1.2,
+            label=f'ajuste: posx = {pend:+.4f}·desv {orig:+.3f}  (r = {r:+.2f})')
+    ax.set_xlabel('desviación real (°)')
+    ax.set_ylabel('posx del blob (normalizada)')
+    ax.set_title(f'Calibración: desviación real vs. x del blob ({len(todos)} pasos)')
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=7, markerscale=2)
+    fig.tight_layout()
+    salida = os.path.join(dir_salida, 'fig_calibracion.png')
+    fig.savefig(salida, dpi=150)
+    plt.close(fig)
+    print(f'Figura: {salida}')
+
+
+def figura_final_series(datos, final, dir_salida):
+    """Separación y |desviación| de la solución final, una fila por configuración."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    fig, ejes = plt.subplots(len(final), 2, figsize=(11, 2.8 * len(final)),
+                             squeeze=False)
+    for (ax_s, ax_d), (cfg, et) in zip(ejes, final.items()):
+        _dibujar_series(ax_s, ax_d, [(et, datos[et][cfg])])
+        m = metricas(datos[et][cfg])
+        ax_s.set_title(f'{cfg} ({et}): {m["pct_en_banda"]:.0f} % en banda, '
+                       f'sep. media {m["separacion_media_m"]:.2f} m', fontsize=9)
+        ax_d.set_title(f'{cfg}: |desv| media {m["desviacion_media_deg"]:.1f}°, '
+                       f'{m["pct_desv_bajo_umbral"]:.0f} % < 15°', fontsize=9)
+    ejes[0][0].legend(fontsize=7, loc='upper right')
+    fig.tight_layout()
+    salida = os.path.join(dir_salida, 'fig_final_series.png')
     fig.savefig(salida, dpi=150)
     plt.close(fig)
     print(f'Figura: {salida}')
@@ -447,8 +575,11 @@ def main():
         description='Métricas, tablas y figuras del anexo B a partir de '
                     'p1_logs/eval_*.csv (sin simulador).')
     a.add_argument('--etiquetas', nargs='+', default=None,
-                   help='etiquetas a incluir (p. ej. sac_s0 aleatorio). '
-                        'Por defecto, todas las que haya en p1_logs')
+                   help='etiquetas a incluir (p. ej. sac_s0 sac_s1). Por '
+                        'defecto, todas las de p1_logs salvo "aleatorio"')
+    a.add_argument('--final', nargs='+', default=None, metavar='Cn=ETIQUETA',
+                   help='política elegida por configuración, p. ej. '
+                        'C1=sac_s1 C2=sac_s2 C3=sac_s1')
     a.add_argument('--salida', default='p1_graficas',
                    help='carpeta donde guardar figuras y tablas')
     a.add_argument('--solo-tablas', action='store_true',
@@ -457,9 +588,12 @@ def main():
                    help='no imprime las tablas y avisos en la consola')
     args = a.parse_args()
 
-    datos = descubrir()
+    todos = descubrir()
+    final = parsear_final(args.final, todos) if args.final else None
     if args.etiquetas:
-        datos = {et: v for et, v in datos.items() if et in args.etiquetas}
+        datos = {et: v for et, v in todos.items() if et in args.etiquetas}
+    else:
+        datos ={et: v for et, v in todos.items() if et not in EXCLUIDAS}
     if not datos:
         raise SystemExit(
             'No hay registros de evaluación en p1_logs/eval_*.csv'
@@ -469,13 +603,25 @@ def main():
     print('Etiquetas: ' + ', '.join(datos))
 
     escribir_tablas(datos, args.salida)
+    if final:
+        escribir_tabla_final(todos, final, args.salida)
     if not args.sin_consola:
         for et, por_config in datos.items():
             imprimir_consola(et, por_config)
+        if final:
+            imprimir_tabla('solución final (' + ', '.join(
+                f'{c}={e}' for c, e in final.items()) + ')',
+                {**{c: metricas(todos[e][c]) for c, e in final.items()},
+                 'TOTAL': metricas([f for c, e in final.items() for f in todos[e][c]])})
+    for aviso in episodios_incompletos(datos):
+        print(f'AVISO: {aviso}. Cuenta como "otra"; repite esa evaluación.')
     if not args.solo_tablas:
         for cfg in ORDEN_CONFIG:
             figura_series(datos, args.salida, cfg)
         figura_desenlaces(datos, args.salida)
+        figura_calibracion(datos, args.salida)
+        if final:
+            figura_final_series(todos, final, args.salida)
 
 
 if __name__ == '__main__':

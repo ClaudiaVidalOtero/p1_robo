@@ -46,7 +46,7 @@ ros2 run robobo_ros2 robobo_container --ros-args \
 ```bash
 # 1. Calibración del sensor y volcado a config/p1_config.json
 python3 p1_calibrar.py --distancia 0.375
-python3 -c "from p1_robobo_env import importar_calibracion as i; i()"
+python3 p1_entrenar.py --importar-calibracion
 
 # 2. Comprobar el entorno y la configuración activa
 python3 p1_entrenar.py --comprobar
@@ -66,8 +66,9 @@ python3 p1_evaluar.py --algoritmo sac --semilla 0
 python3 p1_evaluar.py --algoritmo aleatorio
 
 # 7. Métricas, tablas y figuras del anexo B a partir de los CSV de evaluación
-python3 p1_graficas_eval.py                    # todo lo que haya en p1_logs
+python3 p1_graficas_eval.py                    # todo p1_logs salvo 'aleatorio'
 python3 p1_graficas_eval.py --etiquetas sac_s0 # sólo una política
+python3 p1_graficas_eval.py --final C1=sac_s1 C2=sac_s2 C3=sac_s1
 python3 p1_graficas_eval.py --solo-tablas      # sin matplotlib
 ```
 

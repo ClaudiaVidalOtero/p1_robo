@@ -175,12 +175,12 @@ No confundir estos umbrales propios de entrenamiento con los de evaluación.
 Durante p1_evaluar.py las terminaciones propias se anotan, pero el episodio
 solo lo corta el protocolo del anexo B.
 
-Reinicio en simulación: RESET_DIRECTO=true reinicia la escena por conexión
+Reinicio en simulación: se reinicia la escena por conexión
 directa a RoboboSim, no mediante el módulo sim del puente. El puente del
 seguidor se lanza únicamente con modules:="['blob']"; el módulo cámara no
 hace falta. Tras el reset se espera RESET_ESPERA_S=1,5 s, se fija tilt y se
-activa el detector verde. POS_INICIO=null: no se teletransporta al seguidor;
-se usa la colocación inicial de la escena. Hay un intervalo mínimo de 4 s
+activa el detector verde. No se teletransporta al seguidor: se usa la
+colocación inicial de la escena. Hay un intervalo mínimo de 4 s
 entre resets. El guía continúa circulando durante los pasos y no espera al
 seguidor; el reinicio de entrenamiento reinicia la escena.
 
@@ -228,21 +228,17 @@ los pasos sumados pueden sobrepasar ligeramente 20 000 al cerrar episodio):
   SAC semilla 1                148      19 896   101,368       8–300
   SAC semilla 2                156      19 823    80,862       6–300
   PPO semilla 0 (actual)       819      20 433   -16,536       5–112
-  PPO crucero 18–30 (antiguo)  574      20 369    -8,264       4–181
 
 Tiempos acumulados de los monitores y coste medio observado:
   SAC s0 8 704,84 s / 19 887 pasos = 0,438 s/paso
   SAC s1 8 673,37 s / 19 896 pasos = 0,436 s/paso
   SAC s2 8 687,48 s / 19 823 pasos = 0,438 s/paso
   PPO s0 actual 12 549,49 s / 20 433 pasos = 0,614 s/paso
-  PPO crucero antiguo 10 909,21 s / 20 369 pasos = 0,536 s/paso
 
 Modelos que sí existen en modelos/: p1_modelo_sac_s0.zip,
 p1_modelo_sac_s1.zip, p1_modelo_sac_s2.zip y p1_modelo_ppo_s0.zip.
-No aparece actualmente el modelo PPO crucero 18–30 ni
-config/p1_config_ppo_s0.json, aunque el README y el registro de cambios
-histórico los mencionen. Sin el modelo y la configuración exacta, el
-experimento antiguo no es reproducible desde el estado actual del directorio.
+No aparece actualmente config/p1_config_ppo_s0.json, aunque el registro de
+cambios histórico lo mencione.
 
 La configuración del guía se cambia manualmente en RoboboSim y no queda
 escrita en los CSV de Monitor. Por tanto, Variable 10–40 para SAC/PPO s0 es
@@ -277,8 +273,7 @@ Lectura actual de monitores: SAC s0/s1/s2 tienen, respectivamente, 46/155,
 49/148 y 44/156 episodios de 300 pasos; las tres recompensas medias globales
 son positivas. PPO s0 actual no supera 112 pasos y su recompensa media es
 negativa. Las cifras globales anteriores son descriptivas, no reemplazan las
-curvas por semillas. PPO crucero 18–30 es una variante exploratoria y usó la
-banda de recompensa antigua.
+curvas por semillas.
 
 2.4. Matriz de experimentación requerida y estado
 -------------------------------------------------
@@ -292,9 +287,7 @@ pero sus monitores no registran C1/C2/C3. No hay evidencia en los ficheros de
 un barrido completo SAC y PPO para cada configuración de entrenamiento; no
 afirmar que el requisito experimental esté satisfecho. Completar la matriz,
 registrar modo/velocidades, semilla, pasos, parámetros y física/multiplicador
-junto a cada ejecución. Las pruebas PPO crucero 18–30 no sustituyen a PPO
-Variable 10–40 ni comparan limpiamente con SAC, pues además usaron una banda
-de recompensa antigua.
+junto a cada ejecución.
 
 
 3. EVALUACIÓN SEGÚN ANEXO B
@@ -359,7 +352,6 @@ Formato de cada celda: completados/episodios; % banda; separación media m;
 media |desv| grados; % |desv|<15°. Los desenlaces y duración se anotan debajo.
 
   Etiqueta                   C1                         C2                         C3
-  PPO crucero 18–30 antiguo  1/1; 99,0; 0,352; 2,2;100  1/1; 34,2; 0,544; 6,4;91,4  1/1;51,5;0,469;5,6;96,0
   PPO s0 actual              0/1; 42,9; 0,337;10,6;57,1 0/1;75,5;0,426;11,7;76,1  0/1;91,3;0,400;24,1;52,2
   SAC s0 actual               0/1; 30,8; 0,289;19,0;46,2 0/1;32,4;0,523;29,3;52,9  0/1;51,6;0,482;32,5;51,6
   SAC s1 actual               1/1; 99,3; 0,353; 3,6;98,0 0/1;68,1;0,441;14,7;86,1  0/1;78,1;0,406;12,2;88,6
@@ -367,7 +359,6 @@ media |desv| grados; % |desv|<15°. Los desenlaces y duración se anotan debajo.
   Aleatoria                  no registrado              no registrado              0/1;75,0;0,413;26,4;40,0
 
 Totales calculados por el script (no tratar como selección final):
-  PPO crucero antiguo: 3/3 completados; 61,6% banda; 0,455 m; 4,7°; 95,8% <15°.
   PPO s0 actual:       0/3; 76,2% banda; 0,420 m; 13,2°; 72,5% <15°.
   SAC s0 actual:       0/3; 39,7% banda; 0,468 m; 28,8°; 51,3% <15°.
   SAC s1 actual:       1/3; 89,7% banda; 0,378 m; 7,2°; 94,0% <15°.
@@ -377,7 +368,6 @@ Totales calculados por el script (no tratar como selección final):
 
 Desenlaces/tiempos exactos de los registros vigentes:
   Aleatoria C3: perdido por vista a 7,9 s (una ejecución, solo C3).
-  PPO crucero antiguo: C1/C2/C3 completados a 120,3/120,2/120,0 s.
   PPO s0: C1 colisión a 2,9 s; C2 perdido por vista a 63,4 s;
           C3 perdido por vista a 9,1 s.
   SAC s0: C1 perdido por vista a 5,4 s; C2 perdido por distancia a 13,4 s;
@@ -387,14 +377,10 @@ Desenlaces/tiempos exactos de los registros vigentes:
   SAC s2: C1 perdido por vista a 71,8 s; C2 completado a 120,2 s;
           C3 CSV abierto/sin desenlace a 16,5 s (incompleto).
 
-La evaluación antigua PPO crucero 18–30 terminó las tres configuraciones,
-pero no es una política final reproducible: empleó la banda antigua y su
-modelo/configuración no están en el directorio actual. La aleatoria solo tiene
-C3. Las evaluaciones de PPO s0 y SAC s0/s1/s2 están registradas, pero no
+La aleatoria solo tiene C3. Las evaluaciones de PPO s0 y SAC s0/s1/s2 están registradas, pero no
 resuelven las tres configuraciones; además, SAC s2 C3 está interrumpida.
 
 La velocidad media real del guía que sale de esos mismos CSV es:
-  PPO crucero antiguo C1/C2/C3: 0,049 / 0,150 / 0,122 m/s.
   PPO s0 C1/C2/C3:              0,033 / 0,137 / 0,110 m/s.
   SAC s0 C1/C2/C3:              0,040 / 0,162 / 0,142 m/s.
   SAC s1 C1/C2/C3:              0,050 / 0,131 / 0,128 m/s.

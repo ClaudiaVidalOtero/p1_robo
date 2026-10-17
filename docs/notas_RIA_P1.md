@@ -167,7 +167,6 @@ Resumen leído de `p1_logs/monitor_*.csv`. El tiempo `t` puede incluir esperas y
 | SAC semilla 1 | 148 | 19 896 | 101,368 | 8–300 |
 | SAC semilla 2 | 156 | 19 823 | 80,862 | 6–300 |
 | PPO semilla 0 (actual) | 819 | 20 433 | −16,536 | 5–112 |
-| PPO crucero 18–30 (antiguo) | 574 | 20 369 | −8,264 | 4–181 |
 
 Tiempos acumulados de los monitores y coste medio observado:
 
@@ -177,11 +176,10 @@ Tiempos acumulados de los monitores y coste medio observado:
 | SAC s1 | 8 673,37 s | 19 896 | 0,436 s/paso |
 | SAC s2 | 8 687,48 s | 19 823 | 0,438 s/paso |
 | PPO s0 actual | 12 549,49 s | 20 433 | 0,614 s/paso |
-| PPO crucero antiguo | 10 909,21 s | 20 369 | 0,536 s/paso |
 
 **Modelos presentes en `modelos/`:** `p1_modelo_sac_s0.zip`, `p1_modelo_sac_s1.zip`, `p1_modelo_sac_s2.zip` y `p1_modelo_ppo_s0.zip`.
 
-Actualmente no aparece el modelo PPO crucero 18–30 ni `config/p1_config_ppo_s0.json`, aunque el README y el registro de cambios histórico los mencionan. Sin ese modelo y su configuración exacta, el experimento antiguo no se puede reproducir desde el estado actual del directorio.
+Actualmente no aparece `config/p1_config_ppo_s0.json`, aunque el registro de cambios histórico lo menciona.
 
 **Limitaciones de trazabilidad**
 
@@ -208,7 +206,6 @@ Para cada entrenamiento final:
 - SAC s0, s1 y s2 tienen, respectivamente, 46/155, 49/148 y 44/156 episodios de 300 pasos, y las tres recompensas medias globales son positivas.
 - PPO s0 actual no pasa de 112 pasos por episodio y su recompensa media es negativa.
 - Estas cifras globales son descriptivas y no sustituyen a las curvas por semilla.
-- PPO crucero 18–30 es una variante exploratoria que usó la banda de recompensa antigua.
 
 ### 2.4. Matriz de experimentación requerida y estado
 
@@ -223,8 +220,6 @@ El anexo B define tres configuraciones del guía:
 Para cada una hay que probar al menos SAC y PPO, comparar parámetros y ejecuciones, y entrenar una política final. La selección definitiva debe tener al menos tres semillas.
 
 **Estado comprobado:** existen tres semillas SAC entrenadas y una PPO s0 actual, pero sus monitores no registran C1, C2 ni C3. Los ficheros no muestran un barrido completo de SAC y PPO para cada configuración de entrenamiento, así que no se puede afirmar que el requisito experimental esté cumplido. Falta completar la matriz y registrar, junto a cada ejecución, el modo y las velocidades, la semilla, los pasos, los parámetros y la física o multiplicador.
-
-Las pruebas de PPO crucero 18–30 no sustituyen a PPO Variable 10–40 ni permiten una comparación limpia con SAC, porque además usaron una banda de recompensa antigua.
 
 ---
 
@@ -271,7 +266,6 @@ El CSV vigente contradice el resumen histórico que había en estas notas (por e
 
 | Etiqueta | C1 | C2 | C3 |
 |---|---|---|---|
-| PPO crucero 18–30 (antiguo) | 1/1; 99,0; 0,352; 2,2; 100 | 1/1; 34,2; 0,544; 6,4; 91,4 | 1/1; 51,5; 0,469; 5,6; 96,0 |
 | PPO s0 actual | 0/1; 42,9; 0,337; 10,6; 57,1 | 0/1; 75,5; 0,426; 11,7; 76,1 | 0/1; 91,3; 0,400; 24,1; 52,2 |
 | SAC s0 actual | 0/1; 30,8; 0,289; 19,0; 46,2 | 0/1; 32,4; 0,523; 29,3; 52,9 | 0/1; 51,6; 0,482; 32,5; 51,6 |
 | SAC s1 actual | 1/1; 99,3; 0,353; 3,6; 98,0 | 0/1; 68,1; 0,441; 14,7; 86,1 | 0/1; 78,1; 0,406; 12,2; 88,6 |
@@ -282,7 +276,6 @@ El CSV vigente contradice el resumen histórico que había en estas notas (por e
 
 | Etiqueta | Completados | % banda | Separación | \|Desv.\| | % < 15° |
 |---|---|---|---|---|---|
-| PPO crucero antiguo | 3/3 | 61,6 | 0,455 m | 4,7° | 95,8 |
 | PPO s0 actual | 0/3 | 76,2 | 0,420 m | 13,2° | 72,5 |
 | SAC s0 actual | 0/3 | 39,7 | 0,468 m | 28,8° | 51,3 |
 | SAC s1 actual | 1/3 | 89,7 | 0,378 m | 7,2° | 94,0 |
@@ -293,19 +286,17 @@ En SAC s2, C3 está incompleto, así que ese total no debe usarse como evaluaci�
 **Desenlaces y tiempos exactos de los registros vigentes**
 
 - **Aleatoria:** C3 perdido por vista a los 7,9 s (una sola ejecución, solo C3).
-- **PPO crucero antiguo:** C1, C2 y C3 completados a 120,3 / 120,2 / 120,0 s.
 - **PPO s0:** C1 colisión a los 2,9 s; C2 perdido por vista a los 63,4 s; C3 perdido por vista a los 9,1 s.
 - **SAC s0:** C1 perdido por vista a los 5,4 s; C2 perdido por distancia a los 13,4 s; C3 perdido por distancia a los 12,6 s.
 - **SAC s1:** C1 completado a los 120,4 s; C2 perdido por distancia a los 28,7 s; C3 perdido por vista a los 45,4 s.
 - **SAC s2:** C1 perdido por vista a los 71,8 s; C2 completado a los 120,2 s; C3 con CSV abierto y sin desenlace a los 16,5 s (incompleto).
 
-La evaluación antigua de PPO crucero 18–30 terminó las tres configuraciones, pero no es una política final reproducible: usó la banda antigua y su modelo y configuración no están en el directorio actual. La aleatoria solo tiene C3. Las evaluaciones de PPO s0 y SAC s0/s1/s2 están registradas, pero no cubren las tres configuraciones, y la de SAC s2 en C3 está interrumpida.
+La aleatoria solo tiene C3. Las evaluaciones de PPO s0 y SAC s0/s1/s2 están registradas, pero no cubren las tres configuraciones, y la de SAC s2 en C3 está interrumpida.
 
 **Velocidad media real del guía** (calculada a partir de esos mismos CSV):
 
 | Etiqueta | C1 | C2 | C3 |
 |---|---|---|---|
-| PPO crucero antiguo | 0,049 m/s | 0,150 m/s | 0,122 m/s |
 | PPO s0 | 0,033 m/s | 0,137 m/s | 0,110 m/s |
 | SAC s0 | 0,040 m/s | 0,162 m/s | 0,142 m/s |
 | SAC s1 | 0,050 m/s | 0,131 m/s | 0,128 m/s |

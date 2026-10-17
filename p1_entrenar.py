@@ -1,63 +1,26 @@
 #!/usr/bin/env python3
 """
-Práctica 1 — Entrenamiento y evaluación de la política de SEGUIMIENTO.
+Práctica 1 — Entrenamiento con Stable-Baselines3 y curvas de aprendizaje.
 
-Stable-Baselines3 sobre el entorno RoboboSeguidorEnv (p1_robobo_env.py): el
-Robobo seguidor aprende a circular detrás del guía (pelota verde) por el anillo
-exterior de RoboboSim.
+Modos (uno por ejecución, desde la raíz del proyecto):
 
-----------------------------------------------------------------------
-ORDEN RECOMENDADO
-----------------------------------------------------------------------
+    python3 p1_entrenar.py --importar-calibracion   # calibracion.json -> p1_config.json
+    python3 p1_entrenar.py --normalizacion          # configuración activa
+    python3 p1_entrenar.py --comprobar              # check_env de Gymnasium
+    python3 p1_entrenar.py --aleatorio --episodios 8
+    python3 p1_entrenar.py --entrenar --algoritmo sac --pasos 20000 --semilla 0
+    python3 p1_entrenar.py --evaluar  --algoritmo sac --semilla 0
+    python3 p1_entrenar.py --graficas --grupos sac_s ppo_s --ventana 10
 
-  0. Calibrar el sensor (herramienta aparte, ya entregada):
+--aleatorio deja p1_logs/pasos_aleatorio_s<N>.csv, de donde --graficas toma
+la recompensa media de referencia. --entrenar deja el Monitor
+p1_logs/monitor_<alg>_s<N>.monitor.csv (una fila por episodio) y el modelo
+modelos/p1_modelo_<alg>_s<N>.zip. La evaluación del anexo B está en
+p1_evaluar.py.
 
-         python3 p1_calibrar.py --distancia 0.375
-
-     y volcar los resultados a la configuración:
-
-         python3 -c "from p1_robobo_env import importar_calibracion as i; i()"
-
-  1. Comprobar la interfaz del entorno y ver la configuración activa:
-
-         python3 p1_entrenar.py --comprobar
-         python3 p1_entrenar.py --normalizacion
-
-  2. Línea base aleatoria (referencia obligatoria) y medida del coste:
-
-         python3 p1_entrenar.py --aleatorio --episodios 8
-
-  3. Entrenar (declarar la config del guía en el simulador):
-
-         python3 p1_entrenar.py --entrenar --algoritmo sac --pasos 20000 --semilla 0
-
-  4. Evaluar la política aprendida:
-
-         python3 p1_entrenar.py --evaluar --algoritmo sac --semilla 0 --episodios 8
-
-  5. Curvas de aprendizaje a partir de los CSV que deja Monitor (media y
-     banda min-max de las semillas de cada grupo, causas de fin y línea de
-     la política aleatoria):
-
-         python3 p1_entrenar.py --graficas --grupos sac_s --ventana 10
-         python3 p1_entrenar.py --graficas --grupos sac_s0 ppo_s0 --salida comp.png
-
-----------------------------------------------------------------------
-SOBRE LA ELECCIÓN DEL ALGORITMO
-----------------------------------------------------------------------
-
-Cada paso del entorno cuesta tiempo REAL (PASO_S = 0,2 s más el coste del
-paso). Con ese presupuesto:
-
-  SAC   Fuera de política. Reutiliza cada transición muchas veces desde un
-        búfer de repetición, así que aprovecha mucho mejor pocas
-        interacciones. Es la opción coherente cuando cada paso cuesta tiempo.
-
-  PPO   Dentro de política. Descarta las transiciones tras cada
-        actualización; necesita más pasos para el mismo resultado, pero es
-        más estable y fácil de ajustar. Se incluye para comparar (apartado 8).
-
-Se miden y declaran los segundos por paso con --aleatorio y con --entrenar.
+Algoritmos: SAC (fuera de política, reutiliza cada transición desde el búfer
+de repetición: aprovecha mejor pocos pasos, que aquí cuestan tiempo real) y
+PPO (dentro de política, más estable pero necesita más pasos).
 """
 
 import argparse
@@ -70,6 +33,7 @@ import time
 
 import numpy as np
 
+from p1_graficas_eval import RUTA_LOGS
 from p1_robobo_env import (
     RUTA_CONFIG,
     RUTA_MODELOS,
@@ -78,17 +42,13 @@ from p1_robobo_env import (
     importar_calibracion,
 )
 
-RUTA_LOGS = 'p1_logs'
 RUTA_CHECKPOINTS = 'p1_checkpoints'
 
 
 # =====================================================================
 # Hiperparámetros
 # =====================================================================
-#
-# Los valores por defecto de Stable-Baselines3 suponen entornos que corren a
-# miles de pasos por segundo. Aquí el cuello de botella es la recogida, así
-# que se ajustan sobre todo los lotes.
+# Cada paso cuesta tiempo real: se ajustan sobre todo los lotes.
 
 HIPER_SAC = {
     'learning_rate': 3e-4,
@@ -103,7 +63,7 @@ HIPER_SAC = {
 
 HIPER_PPO = {
     'learning_rate': 3e-4,
-    'n_steps': 512,              # ~1,7 min de simulación por actualización a 0,2 s
+    'n_steps': 512,              # pasos recogidos por actualización
     'batch_size': 64,
     'n_epochs': 10,
     'gamma': 0.99,
@@ -145,7 +105,7 @@ def crear_env(args):
 # =====================================================================
 
 def modo_normalizacion(args):
-    """Imprime la configuración activa (evidencia de normalización)."""
+    """Imprime la configuración activa y la normalización de la observación."""
     c = cargar_config(args.config)
     print(f'Configuración: {args.config}')
     print(json.dumps(c, indent=2, ensure_ascii=False))
@@ -155,17 +115,12 @@ def modo_normalizacion(args):
         c['POSX_CENTRO'], c['POSX_CENTRO']))
     print('  size = size / {:.0f}          -> [0, 1]'.format(c['SIZE_MAX']))
     print('  banda objetivo en size = [{:.1f}, {:.1f}], centro {:.1f}'.format(*band))
-    print('  no visible -> [0.0, 0.0]')
+    print('  posy = y / {:.0f}            -> [0, 1]  (OBS_Y={})'.format(c['IMG_ALTO'], c['OBS_Y']))
+    print('  no visible -> posx = size = posy = 0')
 
 
 def modo_comprobar(args):
-    """Verifica que el entorno cumple el contrato de Gymnasium.
-
-    check_env recorre los espacios, llama a reset()/step() y avisa de las
-    incoherencias habituales (tipos, límites, orden de retorno). Conviene
-    ejecutarlo tras tocar el entorno: un fallo aquí se vería durante el
-    entrenamiento como falta de convergencia difícil de diagnosticar.
-    """
+    """Comprueba con check_env que el entorno cumple la interfaz de Gymnasium."""
     from stable_baselines3.common.env_checker import check_env
     env = crear_env(args)
     try:
@@ -176,10 +131,7 @@ def modo_comprobar(args):
 
 
 def modo_aleatorio(args):
-    """Línea base con acciones aleatorias y medida del coste por paso.
-
-    Es la referencia contra la que se compara todo entrenamiento.
-    """
+    """Línea base con acciones aleatorias en el entorno de entrenamiento."""
     env = crear_env(args)
     try:
         ruta = os.path.join(RUTA_LOGS, f'pasos_aleatorio_s{args.semilla}.csv')
@@ -194,8 +146,7 @@ def modo_entrenar(args):
     try:
         from stable_baselines3.common.monitor import Monitor
         os.makedirs(RUTA_LOGS, exist_ok=True)
-        # Monitor escribe un CSV con una fila por episodio; info_keywords añade
-        # la causa de fin (choque/perdido) leída del info del último paso.
+        # Monitor: una fila por episodio con r, l, t y la causa de fin.
         csv = os.path.join(RUTA_LOGS, f'monitor_{args.algoritmo}_s{args.semilla}')
         env = Monitor(env, filename=csv,
                       info_keywords=('choque', 'perdido'))
@@ -205,10 +156,7 @@ def modo_entrenar(args):
               f'{args.pasos} pasos (semilla {args.semilla}).')
         print('Ctrl-C interrumpe y guarda el modelo igualmente.\n')
 
-        # Copias intermedias: cada paso cuesta tiempo real y un fallo del
-        # simulador a mitad perdería horas. Con un único entorno, save_freq
-        # cuenta llamadas a step(). Quedan en
-        # p1_checkpoints/<algoritmo>_s<semilla>/<algoritmo>_s<semilla>_<pasos>_steps.zip
+        # Copias intermedias cada N llamadas a step() en p1_checkpoints/.
         callback = None
         if args.checkpoint > 0:
             from stable_baselines3.common.callbacks import CheckpointCallback
@@ -227,8 +175,7 @@ def modo_entrenar(args):
         except KeyboardInterrupt:
             print('\nEntrenamiento interrumpido por el usuario.')
         except Exception:
-            # Fallo del entorno (simulador, puente...): la red en memoria sigue
-            # siendo válida, así que se guarda antes de propagar el error.
+            # Fallo del simulador o del puente: se guarda la red antes de propagar.
             ruta = ruta_modelo(args) + '_interrumpido'
             modelo.save(ruta)
             print(f'\nERROR durante el entrenamiento. Modelo guardado en {ruta}.zip')
@@ -249,7 +196,7 @@ def modo_evaluar(args):
         if not os.path.exists(ruta_modelo(args) + '.zip'):
             raise SystemExit(f'No existe {ruta_modelo(args)}.zip. Entrena primero.')
         modelo = cargar_algoritmo(args, env)
-        # determinista=True: acción media en vez de muestrear (sin exploración).
+        # deterministic=True: acción media, sin exploración.
         ruta = os.path.join(RUTA_LOGS, f'pasos_{args.algoritmo}_s{args.semilla}.csv')
         resumen(env,
                 lambda obs: modelo.predict(obs, deterministic=True)[0],
@@ -265,18 +212,10 @@ def modo_evaluar(args):
 # =====================================================================
 
 def resumen(env, politica, episodios, titulo, ruta_pasos=None):
-    """Ejecuta episodios y resume el resultado.
+    """Ejecuta episodios con la política (None = aleatoria) y resume el resultado.
 
-    Métricas propias del entorno (la evaluación oficial del anexo B, con
-    verdad del terreno de ambos robots, es otra herramienta). Aquí:
-      - completados: episodios que agotan el tiempo sin chocar ni perder al guía
-      - desenlaces: por choque / guía perdido / tiempo agotado
-      - % de pasos en banda objetivo y tamaño medio del blob
-      - coste en s por paso (incluye resets)
-
-    Si ruta_pasos se indica, escribe además un CSV con una fila por paso
-    (registro por paso que pide la entrega) para poder diagnosticar qué
-    observación recibe la política en cada instante.
+    Usa las terminaciones del propio entorno, no las del anexo B
+    (p1_evaluar.py). Con ruta_pasos escribe un CSV con una fila por paso.
     """
     recompensas, longitudes = [], []
     completados = choques = perdidos = 0
@@ -285,8 +224,7 @@ def resumen(env, politica, episodios, titulo, ruta_pasos=None):
 
     if ruta_pasos:
         os.makedirs(os.path.dirname(ruta_pasos) or '.', exist_ok=True)
-    # Sin ruta_pasos, nullcontext() da f = None y no se escribe CSV.
-    with (open(ruta_pasos, 'w', newline='') if ruta_pasos
+    with (open(ruta_pasos, 'w', newline='', encoding='utf-8') if ruta_pasos
           else contextlib.nullcontext()) as f:
         if f is not None:
             f.write('episodio,paso,t,posx,size_norm,size_raw,v,w,r,'
@@ -329,7 +267,7 @@ def resumen(env, politica, episodios, titulo, ruta_pasos=None):
                 desenlace = 'choque'
             elif info.get('perdido'):
                 perdidos += 1
-                desenlace = 'gu\u00eda perdido'
+                desenlace = 'guía perdido'
             else:
                 completados += 1
                 desenlace = 'completado'
@@ -358,15 +296,14 @@ def resumen(env, politica, episodios, titulo, ruta_pasos=None):
 # =====================================================================
 
 def _leer_monitor(ruta):
-    """Lee un CSV de Monitor de SB3.
+    """Lee un CSV de Monitor (primera línea '#' y columnas r,l,t,choque,perdido).
 
-    Devuelve (pasos_acumulados, recompensa, longitud, choque, perdido), un
-    elemento por episodio. El archivo empieza con una línea '#' de cabecera
-    JSON y luego 'r,l,t,choque,perdido' (info_keywords de Monitor).
+    Devuelve arrays por episodio (pasos acumulados, recompensa, longitud,
+    choque, perdido) y t_final, segundos desde el inicio al último episodio.
     """
     pasos, recompensas, longitudes, choques, perdidos = [], [], [], [], []
-    acumulado = 0
-    with open(ruta) as f:
+    acumulado, t_final = 0, 0.0
+    with open(ruta, encoding='utf-8') as f:
         lineas = [x for x in f if x.strip() and not x.startswith('#')]
     for fila in csv.DictReader(lineas):
         l = int(float(fila['l']))
@@ -376,8 +313,10 @@ def _leer_monitor(ruta):
         longitudes.append(l)
         choques.append(fila.get('choque') == 'True')
         perdidos.append(fila.get('perdido') == 'True')
+        t_final = float(fila['t'])
     return (np.array(pasos), np.array(recompensas), np.array(longitudes),
-            np.array(choques, dtype=float), np.array(perdidos, dtype=float))
+            np.array(choques, dtype=float), np.array(perdidos, dtype=float),
+            t_final)
 
 
 def _media_movil(y, ventana):
@@ -389,14 +328,13 @@ def _media_movil(y, ventana):
 
 
 def _recompensa_aleatoria(semilla=0):
-    """Recompensa media por episodio de la política aleatoria, a partir del
-    registro por paso que deja --aleatorio (p1_logs/pasos_aleatorio_sN.csv).
-    Devuelve (media, nº episodios) o (None, 0) si no existe."""
+    """(Recompensa media por episodio, nº de episodios) de la política
+    aleatoria a partir de pasos_aleatorio_s<N>.csv; (None, 0) si no existe."""
     ruta = os.path.join(RUTA_LOGS, f'pasos_aleatorio_s{semilla}.csv')
     if not os.path.exists(ruta):
         return None, 0
     por_ep = {}
-    with open(ruta) as f:
+    with open(ruta, encoding='utf-8') as f:
         for fila in csv.DictReader(f):
             por_ep[fila['episodio']] = por_ep.get(fila['episodio'], 0.0) + float(fila['r'])
     if not por_ep:
@@ -405,8 +343,9 @@ def _recompensa_aleatoria(semilla=0):
 
 
 def modo_graficas(args):
-    """Curvas de aprendizaje con Matplotlib..
-    """
+    """Curvas de aprendizaje desde los Monitor: recompensa, duración y causa
+    de fin frente a los pasos de step(); media y banda min-max por grupo de
+    semillas, serie cruda tenue y línea de la política aleatoria."""
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
@@ -416,6 +355,7 @@ def modo_graficas(args):
     colores = plt.rcParams['axes.prop_cycle'].by_key()['color']
     estilos_causa = {'choque': '-', 'perdido': '--', 'tiempo': ':'}
     resumen_pie = []
+    pasos_tot, segundos_tot = 0, 0.0   # coste medio por paso (incluye reinicios)
 
     for i, grupo in enumerate(args.grupos):
         rutas = sorted(glob.glob(os.path.join(RUTA_LOGS, f'monitor_{grupo}*.monitor.csv')))
@@ -424,10 +364,12 @@ def modo_graficas(args):
         color = colores[i % len(colores)]
         series = []   # por semilla: (x, {magnitud: media móvil})
         for ruta in rutas:
-            pasos, r, l, choque, perdido = _leer_monitor(ruta)
+            pasos, r, l, choque, perdido, t_final = _leer_monitor(ruta)
             if len(pasos) < args.ventana:
                 print(f'aviso: {ruta} tiene menos episodios que la ventana; se omite')
                 continue
+            pasos_tot += int(pasos[-1])
+            segundos_tot += t_final
             tiempo = 1.0 - np.clip(choque + perdido, 0, 1)
             ax_r.plot(pasos, r, color=color, alpha=0.15, linewidth=0.7)
             ax_l.plot(pasos, l, color=color, alpha=0.15, linewidth=0.7)
@@ -472,7 +414,9 @@ def modo_graficas(args):
         for causa, ls in estilos_causa.items():
             ax_c.plot(rejilla, interp(causa).mean(0), color=color, linestyle=ls)
 
-    if args.ref is not None:
+    if args.sin_ref:
+        ref, n_ref = None, 0
+    elif args.ref is not None:
         ref, n_ref = args.ref, 0
     else:
         ref, n_ref = _recompensa_aleatoria()
@@ -487,7 +431,9 @@ def modo_graficas(args):
         ax_c.plot([], [], color='0.3', linestyle=ls, label=nombre)
 
     ax_r.set_ylabel('Recompensa por episodio')
-    ax_l.set_ylabel('Duración del episodio (pasos)')
+    s_paso = segundos_tot / pasos_tot if pasos_tot else None
+    ax_l.set_ylabel('Duración del episodio (pasos'
+                    + (f'; 1 paso ≈ {s_paso:.2f} s)' if s_paso else ')'))
     ax_c.set_ylabel('Fracción de episodios')
     ax_c.set_ylim(-0.02, 1.02)
     ax_c.set_xlabel('Pasos del entorno (llamadas a step())')
@@ -503,9 +449,8 @@ def modo_graficas(args):
     print(f'Figura guardada en {salida}')
     print('Para el pie: ' + '; '.join(resumen_pie)
           + f'; ventana {args.ventana} episodios'
+          + (f'; {s_paso:.2f} s por paso medidos (reinicios incluidos)' if s_paso else '')
           + (f'; ref. aleatoria {ref:.1f}' if ref is not None else ''))
-
-
 
 
 def main():
@@ -533,7 +478,7 @@ def main():
                    help='copia intermedia del modelo cada N pasos (0 = ninguna)')
     p.add_argument('--episodios', type=int, default=8)
     p.add_argument('--pasos-max', type=int, default=300,
-                   help='longitud máxima de un episodio (60 s / 0,2 s)')
+                   help='longitud máxima de un episodio en pasos')
     p.add_argument('--semilla', type=int, default=0)
     p.add_argument('--sin-simulador', action='store_true',
                    help='sin módulo sim; el seguidor se repone a mano')
@@ -547,6 +492,8 @@ def main():
                    help='ventana de la media móvil, en episodios')
     p.add_argument('--ref', type=float, default=None,
                    help='recompensa media de la política aleatoria (línea de referencia)')
+    p.add_argument('--sin-ref', action='store_true',
+                   help='no dibuja la línea de la política aleatoria')
     p.add_argument('--salida', default=None, help='PNG de salida de --graficas')
     p.add_argument('--grupos', nargs='+', default=['sac_s'],
                    help='prefijos de monitor a agrupar (p. ej. sac_s ppo_s0); '

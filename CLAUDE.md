@@ -45,13 +45,13 @@ Mantener la separación en la banda objetivo, sin chocar, sin perder al guía de
 - Recompensa: cada término separado, con su coeficiente numérico y la magnitud observable de la que depende.
 - Detección: `smartphone/set_active_color_blobs` (green). **Un solo blob verde** por imagen; la ciudad real tiene otros elementos verdes.
 - Periodo de control: decisión de diseño, declararlo. Blobs a 5 Hz en tiempo real.
-- Reinicio por conexión directa a RoboboSim (`RESET_DIRECTO`, ver docs/CAMBIOS.txt nº 6): el puente se lanza **solo con `['blob']`**, porque la conexión del módulo `sim` del puente se caía.
+- Reinicio por conexión directa a RoboboSim (ver docs/CAMBIOS.txt nº 6 y 20): el puente se lanza **solo con `['blob']`**, porque la conexión del módulo `sim` del puente se caía.
 
 ## Ficheros
 
 ```
 README.md                 # Estructura e instrucciones de reproducción
-p1_robobo_env.py          # Entorno Gymnasium + calibrar()/comprobar()/importar_calibracion()
+p1_robobo_env.py          # Entorno Gymnasium + cargar_config()/importar_calibracion()
 p1_calibrar.py            # Caracterización del sensor
 p1_entrenar.py            # Entrenamiento / evaluación / gráficas SB3
 p1_evaluar.py             # Evaluador del anexo B (verdad del terreno por conexión directa a RoboboSim; escribe los CSV)
