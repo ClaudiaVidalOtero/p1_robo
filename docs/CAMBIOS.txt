@@ -537,3 +537,13 @@ Formato: [fecha] Título
             pyflakes sin avisos, imports cruzados, prueba p1_evaluar.episodio
             -> CSV -> p1_graficas_eval (tablas y 6 figuras) y mismas tablas y
             curvas con los datos reales.
+
+
+-----------------------------------------------------------------
+[2026-10-18] 21. V_MAX 0,15 -> 0,25 m/s
+-----------------------------------------------------------------
+  - Qué:    V_MAX = 0,25 m/s en config/p1_config.json (y valor por defecto en
+            p1_robobo_env.py; fórmula de la acción en memoria.txt y notas).
+  - Por qué: en C2/C3 el guía llega a ~0,225 m/s; con 0,15 m/s ordenados el
+            seguidor no tenía margen para alcanzarlo.
+  - Efecto: cambia la interfaz de acción: hay que reentrenar.

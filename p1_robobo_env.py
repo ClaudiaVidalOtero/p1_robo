@@ -105,7 +105,7 @@ CONFIG_POR_DEFECTO = {
     'Y_CHOQUE': None,          # y a partir de la cual la pelota sale cortada
 
     'V_MIN': 0.0,              # m/s
-    'V_MAX': 0.15,             # m/s (mayor que la velocidad máxima del guía)
+    'V_MAX': 0.25,             # m/s (mayor que la velocidad máxima del guía)
     'W_MAX': 0.5,              # rad/s
 
     'PASO_S': 0.2,             # periodo de control = periodo del blob (5 Hz)

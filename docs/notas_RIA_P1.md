@@ -43,7 +43,7 @@ Usamos `posy`  para diferenciar una pelota cortada por abajo de una pelota lejan
 La acción es continua, `Box([-1,-1], [1,1])`, con dos componentes normalizados:
 
 ```
-v = 0 + (a0 + 1) / 2 * (0,15 - 0) m/s      →  0 a 0,15 m/s
+v = 0 + (a0 + 1) / 2 * (0,25 - 0) m/s      →  0 a 0,25 m/s
 w = a1 * 0,5 rad/s                          →  -0,5 a +0,5 rad/s
 ```
 

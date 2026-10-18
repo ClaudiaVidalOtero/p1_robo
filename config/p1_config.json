@@ -17,7 +17,7 @@
   "SIZE_CERCA": 144.0,
   "POSX_CERCA_MAX": 0.6,
   "V_MIN": 0.0,
-  "V_MAX": 0.15,
+  "V_MAX": 0.25,
   "W_MAX": 0.5,
   "PASO_S": 0.2,
   "TIMEOUT_LECTURA_S": 2.0,
