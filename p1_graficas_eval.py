@@ -114,7 +114,7 @@ def descubrir(ruta_logs=RUTA_LOGS):
 
 
 # =====================================================================
-# Métricas del anexo B (siempre a partir de los CSV por paso)
+# Métricas del anexo B 
 # =====================================================================
 
 def metricas(filas):
