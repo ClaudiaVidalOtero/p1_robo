@@ -78,3 +78,57 @@ Para evaluar un modelo entrenado con otra configuración, pasar la suya:
 python3 p1_evaluar.py --algoritmo ppo --modelo modelos/p1_modelo_ppo_s0.zip \
     --config config/p1_config_ppo_s0.json
 ```
+
+---
+
+# Práctica 2 — Neuroevolución con NEAT
+
+Mismo entorno, calibración y evaluador que la P1; el controlador es una red
+evolucionada con NEAT-Python 2.0. Los ficheros de la P1 no cambian.
+
+```
+p2_neat.py            Evolución, reanudación, referencia del reto y reevaluación
+p2_controladores.py   Controladores obs -> acción (NEAT, SB3, reto, aleatorio)
+p2_evaluar.py         Anexo B con C1-C4 para cualquier controlador (CSV en p2_logs/)
+p2_graficas.py        Curvas de evolución, especies, complejidad, causas de fin,
+                      topología de la red y tablas del anexo B con paradas (p2_graficas/)
+config/p2_neat.ini    Parámetros de NEAT
+config/p2_config.json Calidad (A/B), duración del episodio, reto, simulador
+p2_evol/<nombre>/     (se genera) configuración copiada, evolucion.csv, especies.csv,
+                      episodios.csv, chk/p2-N, genomas/, mejor_genoma.pkl
+```
+
+Requisitos extra en la imagen nueva (se pierden al recrear el contenedor):
+
+```bash
+pip install --user robobosim                # no viene en la imagen
+pip install --user --upgrade matplotlib     # el de Ubuntu no funciona con NumPy 2
+```
+
+RoboboSim con el multiplicador x1 y las físicas simplificadas, igual en la evolución, la evaluación y la comparación con la P1.
+
+```bash
+# Comprobaciones (indicaciones técnicas, apartado 10)
+python3 p2_neat.py --comprobar --guia C3
+python3 p2_neat.py --reto --guia C3 --episodios 3        # referencia -> p2_evol/referencias.csv
+
+# Evolución incremental de un controlador único (una semilla por PC)
+python3 p2_neat.py --evolucionar --nombre s0 --semilla 0 --generaciones 15 --guia C3
+#   ... poner el guía en C4 en RoboboSim ...
+python3 p2_neat.py --reanudar --nombre s0 --generaciones 15 --guia C4 --duracion 40
+python3 p2_neat.py --reevaluar --nombre s0 --candidatos 5 --episodios 3 --guia C4
+
+# Anexo B (C1-C4) y comparación con la P1
+python3 p2_evaluar.py --neat p2_evol/s0/mejor_genoma.pkl --etiqueta neat_s0
+python3 p2_evaluar.py --sb3 sac --modelo modelos/p1_modelo_sac_s0.zip --configs C1 C2 C3
+python3 p2_evaluar.py --reto
+python3 p2_evaluar.py --aleatorio
+
+# Figuras y tablas (sin ROS ni simulador)
+python3 p2_graficas.py --evol s0 s1
+python3 p2_graficas.py --red p2_evol/s0/mejor_genoma.pkl
+python3 p2_graficas.py --anexo-b
+```
+
+Si la evolución se para sin mensaje (puente caído), se relanza el puente y se
+reanuda: `--reanudar` usa el último `chk/p2-N`.

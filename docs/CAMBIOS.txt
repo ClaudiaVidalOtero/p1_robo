@@ -1,4 +1,4 @@
-REGISTRO DE CAMBIOS — RIA P1 (seguimiento del guía en RoboboSim)
+REGISTRO DE CAMBIOS — RIA P1 y P2 (seguimiento del guía en RoboboSim)
 =================================================================
 
 Cada entrada indica QUÉ se cambió, DÓNDE y POR QUÉ. Los cambios los hizo
@@ -547,3 +547,304 @@ Formato: [fecha] Título
   - Por qué: en C2/C3 el guía llega a ~0,225 m/s; con 0,15 m/s ordenados el
             seguidor no tenía margen para alcanzarlo.
   - Efecto: cambia la interfaz de acción: hay que reentrenar.
+
+
+
+=================================================================
+PRÁCTICA 2 — NEUROEVOLUCIÓN CON NEAT
+=================================================================
+La P2 reutiliza el entorno, la calibración y el evaluador de la P1. Todo
+lo nuevo va en ficheros p2_*.py y config/p2_*; los ficheros de la P1 no
+se modifican. Fuentes: RIA_P2_enunciado_V2.pdf y
+RIA_P2_indicaciones_tecnicas.pdf.
+
+Decisiones del equipo (2026-10-28):
+  - Código en el mismo repositorio, ficheros p2_*.py, importando de la P1.
+  - Objetivo: un único controlador para C1-C4, por evolución incremental
+    C3 -> C4 (RoboboSim no permite cambiar el guía desde código).
+  - Observación igual que en la P1: [posx, size, posy].
+  - Simulador: multiplicador x1 y físicas simplificadas (los mismos que en
+    la P1), en la evolución, la evaluación y la comparación.
+  - Dos ordenadores, una semilla en cada uno, unas 4-6 h por evolución.
+  - No había código del controlador del reto: se escribe uno nuevo.
+
+
+-----------------------------------------------------------------
+[2026-10-28] 22. Entorno del contenedor para la P2
+-----------------------------------------------------------------
+  - Qué:    * Imagen reconstruida con el Dockerfile nuevo del profesor
+              (.\build.ps1 -Pip) y contenedor recreado (docker compose down
+              + .\start.ps1). pip show neat-python -> 2.0.0.
+            * robobosim no viene en la imagen nueva: instalado a mano en el
+              contenedor (pip install --user robobosim, versión 1.5.1).
+            * La imagen trae NumPy 2.5 (pip) y Matplotlib de Ubuntu
+              (compilado con NumPy 1.x): "import matplotlib" falla con
+              "numpy.core.multiarray failed to import". Arreglado con
+              pip install --user --upgrade matplotlib (3.11.2).
+  - Dónde:  contenedor pc-robobo (fuera del repositorio).
+  - Por qué: la P2 necesita neat-python; la P1 y la P2 usan robobosim para
+            el reinicio y la verdad del terreno, y Matplotlib para las figuras.
+  - Efecto: robobosim y matplotlib se pierden al recrear el contenedor: hay
+            que volver a instalarlos (anotado en el README). Afecta también a
+            las gráficas de la P1 en la imagen nueva.
+
+
+-----------------------------------------------------------------
+[2026-10-28] 23. Configuración de la P2: config/p2_neat.ini y config/p2_config.json
+-----------------------------------------------------------------
+  - Qué:    * config/p2_neat.ini: parámetros de NEAT-Python 2.0. Parte del
+              archivo de las indicaciones técnicas (apartado 3) con dos cambios:
+                num_inputs = 3 (observación [posx, size, posy]; num_outputs = 2)
+                compatibility_threshold = 3.0 -> 1.7
+              Resto igual: pop_size 20, full_direct, tanh, elitism 2,
+              species_elitism 1, max_stagnation 8, survival_threshold 0.3,
+              conn_add_prob 0.3, node_add_prob 0.1... La línea seed la
+              sobrescribe p2_neat.py con --semilla en la copia de cada evolución.
+            * config/p2_config.json: parámetros de la evolución que no son de NEAT:
+                DURACION_EVAL_S (30 s)        duración máxima del episodio de evaluación
+                EPISODIOS_POR_INDIVIDUO (1)   episodios por genoma
+                AGREGACION ("media" | "min")  cómo se combinan varios episodios
+                CALIDAD ("A" | "B")           formulación activa
+                CALIDADES.A / CALIDADES.B     coeficientes de cada formulación
+                RETO.K_GIRO (1.5), RETO.K_VEL (2.5)   ganancias del controlador a mano
+                SIM.MULTIPLICADOR (1), SIM.FISICAS ("simplificadas")   para declarar
+  - Por qué: * El umbral de especiación: con 3.0 sólo hay una especie (la
+              distancia genética media de la población inicial es ~1,0) y la
+              innovación no está protegida. Barrido sin simulador (5 semillas
+              x 30 generaciones, calidad ficticia): 1,8 -> 2-3 especies;
+              1,7 -> 2-6 (media 4,2); 1,6 -> hasta 7; <= 1,2 -> más de 10
+              especies y NEAT-Python 2.0 aborta con "population size 20 is
+              less than num_species * min_species_size". Las indicaciones
+              piden entre 3 y 6 especies.
+            * Los parámetros de la evolución y de la calidad van en un archivo
+              (no en el código) para poder cambiarlos sin tocarlo y para que se
+              copien junto a los resultados de cada evolución.
+  - Efecto: si en una evolución real hay demasiadas especies, se puede subir
+            el umbral en p2_evol/<nombre>/p2_neat.ini y reanudar con
+            --nueva-config.
+
+
+-----------------------------------------------------------------
+[2026-10-28] 24. p2_controladores.py: controladores como funciones obs -> acción
+-----------------------------------------------------------------
+  - Qué:    Módulo nuevo. Todos los controladores reciben la observación
+            normalizada del entorno de la P1 y devuelven la acción [a0, a1]
+            en [-1, 1], así que el mismo bucle sirve para evolucionar, para el
+            anexo B y para comparar con la P1.
+              RUTA_CONFIG_P2, RUTA_NEAT_INI   rutas de config/p2_config.json y
+                                              config/p2_neat.ini
+              cargar_config_p2(ruta)          lee p2_config.json
+              cargar_config_neat(ruta)        crea neat.Config con las clases
+                                              por defecto de NEAT-Python
+              politica_red(genoma, config)    construye la red prealimentada del
+                                              genoma y la devuelve como función
+              controlador_neat(genoma.pkl, ini)   carga un genoma guardado
+              controlador_sb3(alg, modelo.zip)    política SAC/PPO de la P1 en modo
+                                                  determinista
+              controlador_reto(c_env, k_giro, k_vel)   controlador programado a
+                    mano: a1 = K_GIRO·posx; avance = fracción K_VEL·(SIZE_OBJ -
+                    size)/SIZE_OBJ de V_MAX, recortada a [0, 1]; sin pelota a la
+                    vista se para
+              controlador_aleatorio(env)      acciones uniformes (línea base)
+  - Por qué: el evaluador y la comparación del apartado 6.5 necesitan tratar
+            igual la red de NEAT y la política de SB3 (indicaciones, ap. 8). El
+            controlador del reto es la referencia de calidad que recomiendan el
+            enunciado (6.3) y las indicaciones (4, 10). Signo del giro:
+            en todas las evaluaciones SAC de la P1 (p1_logs/eval_sac_s*_C*.csv)
+            la correlación posx-a1 es positiva (0,19-0,54): con la pelota en
+            posx > 0 la política gira con a1 > 0.
+  - Efecto: ninguno sobre la P1.
+
+
+-----------------------------------------------------------------
+[2026-10-28] 25. p2_neat.py: evolución, reanudación, referencia y reevaluación
+-----------------------------------------------------------------
+  - Qué:    Programa principal de la P2. Modos (uno por ejecución):
+              --comprobar    un genoma aleatorio juega un episodio y recibe una
+                             calidad (comprobaciones 1 y 2 de las indicaciones)
+              --reto         calidad del controlador a mano en N episodios; la
+                             anota en p2_evol/referencias.csv (línea horizontal
+                             de las curvas)
+              --evolucionar  evolución nueva en p2_evol/<nombre>/
+              --reanudar     sigue desde el último punto de control (para
+                             cambiar el guía a C4, o tras una caída del puente)
+              --reevaluar    vuelve a evaluar a los mejores de cada generación
+                             y guarda el elegido en mejor_genoma.pkl
+            Opciones: --nombre, --semilla, --generaciones, --guia (C1-C4,
+            obligatoria; sólo se anota), --calidad A|B, --duracion,
+            --episodios, --candidatos, --forzar, --nueva-config, --neat,
+            --config, --config-p2.
+
+            Calidad (con información privilegiada: separación y desviación
+            reales a la pelota, leídas con VerdadTerreno de p1_evaluar.py):
+              puntos_banda(sep)          1 dentro de [0,20, 0,45] m; fuera, rampa
+                                         lineal hasta 0 en 0,12 m (colisión) y en
+                                         0,90 m (guía perdido)
+              puntos_alineacion(desv, max)   max(0, 1 - |desv| / DESV_MAX_DEG)
+              episodio_calidad(env, verdad, politica, cal, T)   juega un episodio
+                    con fin según el anexo B (colisión, perdido por distancia,
+                    > 3 s sin ver, o T segundos) y devuelve
+                    calidad = 100·Σ(W_BANDA·banda + W_DESV·alin)·Δt / (T·(W_BANDA+W_DESV))
+                              - P_COLISION | - P_PERDIDO
+                    y un resumen (desenlace, segundos, pasos, separación media,
+                    % en banda, desviación media). Δt es el tiempo real de cada
+                    paso, recortado para no pasar de T.
+              Formulación A: W_BANDA 1, W_DESV 0,5, DESV_MAX 45°, sin
+                    penalización explícita.
+              Formulación B: W_BANDA 1, W_DESV 0, P_COLISION 20, P_PERDIDO 10.
+              evaluar_individuo(politica, etiqueta, k)   k episodios, agrega con
+                    media o mínimo, actualiza CONTADOR y escribe cada episodio
+                    en episodios.csv
+              eval_genomes(genomas, config)   función que llama NEAT: asigna
+                    genoma.fitness a cada genoma de la generación
+
+            Registro:
+              RegistroGeneracion   reporter de NEAT: en post_evaluate escribe una
+                    fila en evolucion.csv (generación, guía, calidad, duración,
+                    mejor, media, desviación, nº de especies, nodos y conexiones
+                    del mejor, evaluaciones, pasos y segundos acumulados,
+                    segundos de la generación), el tamaño y la mejor calidad de
+                    cada especie en especies.csv y el mejor genoma en
+                    genomas/mejor_genNNN.pkl. Al reanudar continúa los contadores
+                    desde la última fila. Sólo guarda rutas y números porque el
+                    Checkpointer lo serializa con pickle.
+              CONTADOR   pasos y evaluaciones del proceso
+              CTX        entorno, verdad del terreno, configuración y generación
+                         actual (fuera del reporter por el mismo motivo)
+
+            Auxiliares:
+              preparar_contexto / cerrar_contexto   crean y cierran el entorno de la
+                    P1 (sin truncado: pasos_max 10^9) y la conexión de la verdad
+                    del terreno
+              comprobar_dimensiones   num_inputs del .ini = tamaño de la observación
+              aviso_simulador         imprime guía, multiplicador, físicas y calidad
+              estimar_coste           cota P·k·(T + T_reinicio) por generación y total
+              preparar_carpeta        crea p2_evol/<nombre>/ con copia de
+                                      p2_neat.ini (con la semilla), p2_config.json
+                                      y p1_config.json usados
+              ultimo_checkpoint       chk/p2-N de número más alto
+              anadir_registros        StdOutReporter, Checkpointer (cada
+                                      generación) y RegistroGeneracion
+              ejecutar                lanza population.run y guarda mejor_run.pkl
+              modo_*                  un modo cada una; main() lee los argumentos
+
+  - Por qué: apartados 5, 6.1-6.3 y 7 del enunciado e indicaciones 2, 4-6 y 10.
+            * Calidad sumada por tiempo real y no por pasos: un paso del entorno
+              dura ~0,4 s en la práctica (P1: 301 pasos en 120 s), no los 0,2 s
+              de PASO_S. Así la calidad no depende del ritmo de la comunicación.
+            * La rampa de la banda y la suma por tiempo dan gradiente desde la
+              primera generación: puntúa más quien aguanta más o se queda más
+              cerca de la banda.
+            * Fin del episodio con los mismos criterios del anexo B: la calidad
+              mide lo mismo que la evaluación final.
+            * El término de alineación (A) evita el atajo de girar sobre sí mismo
+              o seguir la pelota de lado; B no lo tiene y añade penalización
+              explícita: sirve para comparar dos formulaciones (enunciado ap. 5).
+            * Si el puente o RoboboSim se cuelgan, el entorno lanza RuntimeError y
+              la evolución se para sin dar calidad 0 al genoma afectado; se
+              reanuda desde el último punto de control (indicaciones 6.1).
+            * --reevaluar porque el mejor de una generación puede deberse a un
+              episodio afortunado (enunciado 6.3).
+  - Efecto: probado sin simulador con un entorno y una verdad del terreno
+            falsos (scripts de prueba fuera del repositorio):
+            * 2 generaciones + reanudación: contadores continúan (20/40/60
+              evaluaciones), puntos de control chk/p2-1..3, seed escrita en la
+              copia del .ini, misma semilla -> misma población inicial.
+            * La calidad salía 102-103 porque el último paso sumaba más allá de
+              T: corregido recortando Δt; después, máximo 100.
+            * --reanudar --nueva-config y --reevaluar funcionan.
+            Falta probarlo con RoboboSim (--comprobar y --reto).
+
+
+-----------------------------------------------------------------
+[2026-10-28] 26. p2_evaluar.py: anexo B con C4 para cualquier controlador
+-----------------------------------------------------------------
+  - Qué:    Evaluador del anexo B de la P2. Reutiliza p1_evaluar.episodio (mismos
+            criterios de fin, mismo registro por paso y mismas columnas que en la
+            P1) y añade C4 con dos ejecuciones.
+              CONFIGURACIONES, EJECUCIONES   C1-C4 y ejecuciones de cada una
+                                             (C4: 2, por las paradas aleatorias)
+              construir_controlador(args, env, c_env)   elige el controlador
+                    (--neat genoma.pkl, --sb3 sac|ppo --modelo, --reto,
+                    --aleatorio) y la etiqueta de los archivos
+              main()   espera Enter antes de cada configuración (el guía se pone a
+                    mano), ejecuta los episodios y escribe
+                    p2_logs/eval_<etiqueta>_<C>.csv
+  - Por qué: enunciado 6.4 y 6.5 (comparación con la P1 en la misma sesión,
+            mismo simulador) e indicaciones 8.
+  - Efecto: los CSV de la P1 (p1_logs/) no se tocan; los de la P2 van a p2_logs/.
+
+
+-----------------------------------------------------------------
+[2026-10-28] 27. p2_graficas.py: figuras de la evolución, red y tablas del anexo B
+-----------------------------------------------------------------
+  - Qué:    Figuras y tablas sólo a partir de los registros (sin ROS ni
+            simulador). Salida en p2_graficas/.
+            Evolución (--evol s0 s1 ...):
+              leer_evolucion(nombre)   lee evolucion.csv, p2_neat.ini (población,
+                                       semilla) y p2_config.json de la carpeta
+              cambios_guia(ev)         generaciones en las que cambia el guía
+              leer_referencias()       p2_evol/referencias.csv (controlador del reto)
+              pie(evs)                 texto del pie: población, episodios por
+                                       individuo, duración, calidad, guía,
+                                       semillas, pasos y horas totales
+              figura_evolucion         fig_evolucion.png: mejor y media de la
+                    población por generación; con varias semillas, media + banda
+                    min-max y cada semilla tenue; con una, media ± desviación
+                    típica. Línea horizontal del reto y vertical del cambio de guía.
+                    También fig_evolucion_<n>.png por evolución.
+              figura_especies          fig_especies_<n>.png: áreas apiladas de
+                                       individuos por especie (de especies.csv)
+              figura_complejidad       fig_complejidad.png: nodos y conexiones
+                                       activas del mejor
+              figura_causas            fig_causas_<n>.png: fracción de episodios
+                                       por causa de fin en cada generación
+              resumen_evolucion        resumen_evolucion.md: tabla de coste
+                                       (generaciones, evaluaciones, pasos, horas,
+                                       mejor calidad, especies) + pie
+              modo_evol                genera todo lo anterior
+            Red (--red genoma.pkl):
+              dibujar_red              fig_red_<n>.png: función de las
+                    indicaciones (ap. 7) con dos cambios: las flechas se recortan
+                    para que la punta no quede bajo el círculo del nodo, y el peso
+                    se escribe sobre cada conexión (en un punto que depende de la
+                    altura del origen para que no se solapen en los cruces)
+              describir_red            red_<n>.txt: sesgos y conexiones activas
+                                       ordenadas por |peso|, para interpretar la red
+              modo_red
+            Anexo B (--anexo-b [etiquetas]):
+              descubrir()              {etiqueta: {config: filas}} de p2_logs/
+              _velocidad(t, x, z)      velocidad entre filas a partir de la pose (mm)
+              paradas_episodio(pasos)  paradas del guía (< 0,01 m/s durante
+                    > 0,5 s, anexo B.1) y su estado: 'superada' si el seguidor
+                    baja de 0,02 m/s durante la parada y no falla en los 10 s
+                    siguientes a que el guía reanude; 'fallida' si no;
+                    'sin_reanudar' si la parada dura hasta el final del episodio
+              metricas_paradas(filas)  totales de C4
+              fila_tabla(...)          métricas del anexo B con metricas() de
+                                       p1_graficas_eval.py (mismo cálculo que en
+                                       la P1) + paradas
+              modo_anexo_b             tabla_anexo_b_p2.md y .csv por controlador
+                                       y configuración + TOTAL
+  - Por qué: enunciado 9.1 (curvas de evolución: mejor y media con banda,
+            especies, complejidad, varias semillas, referencia, pie con coste),
+            6.5 (interpretar la red) y anexo B.4 (métrica de paradas en C4).
+            El umbral de 0,02 m/s para "el seguidor se detiene" es una decisión
+            nuestra (el anexo no lo fija): hay que declararlo en la memoria.
+  - Efecto: probado con datos sintéticos: 2 evoluciones con cambio C3 -> C4,
+            una referencia del reto y un CSV de C4 con una parada de 20 a 30 s
+            en dos episodios (uno en que el seguidor también para y completa,
+            otro en que no para y choca a los 31 s). Resultado esperado y
+            obtenido: 2 paradas, 1 superada. Revisadas a ojo las 13 salidas.
+
+
+-----------------------------------------------------------------
+[2026-10-28] 28. README: sección de la Práctica 2
+-----------------------------------------------------------------
+  - Qué:    sección "Práctica 2" al final de README.md con la estructura de
+            ficheros, requisitos extra (robobosim y matplotlib en el
+            contenedor) y los comandos para reproducir: comprobaciones,
+            evolución incremental, reevaluación, anexo B y figuras.
+  - Por qué: entregable 9.4 (instrucciones para reproducir la evolución y
+            ejecutar el controlador final).
+  - Efecto: ninguno sobre el código.

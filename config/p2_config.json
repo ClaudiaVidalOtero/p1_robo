@@ -1,0 +1,35 @@
+{
+  "_descripcion": "Configuracion de la evolucion de la Practica 2 (p2_neat.py). Las constantes del sensor y de la accion siguen en p1_config.json. Las calidades usan informacion privilegiada del simulador (separacion y desviacion reales a la pelota).",
+  "DURACION_EVAL_S": 30.0,
+  "EPISODIOS_POR_INDIVIDUO": 1,
+  "AGREGACION": "media",
+  "CALIDAD": "A",
+  "CALIDADES": {
+    "A": {
+      "_descripcion": "banda gradual + alineacion; sin penalizacion explicita (la implicita es dejar de sumar)",
+      "W_BANDA": 1.0,
+      "W_DESV": 0.5,
+      "DESV_MAX_DEG": 45.0,
+      "P_COLISION": 0.0,
+      "P_PERDIDO": 0.0
+    },
+    "B": {
+      "_descripcion": "solo banda gradual + penalizacion explicita por fallo",
+      "W_BANDA": 1.0,
+      "W_DESV": 0.0,
+      "DESV_MAX_DEG": 45.0,
+      "P_COLISION": 20.0,
+      "P_PERDIDO": 10.0
+    }
+  },
+  "RETO": {
+    "_descripcion": "controlador programado a mano (referencia): giro proporcional a posx, avance proporcional al error de size",
+    "K_GIRO": 1.5,
+    "K_VEL": 2.5
+  },
+  "SIM": {
+    "_descripcion": "declarar en la memoria; debe coincidir en evolucion, evaluacion y comparacion con la P1",
+    "MULTIPLICADOR": 1,
+    "FISICAS": "simplificadas"
+  }
+}
