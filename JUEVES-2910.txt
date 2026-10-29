@@ -1,0 +1,248 @@
+=====================================================================
+RIA P2 — QUÉ ENSEÑAR AL PROFESOR EL JUEVES 29/10/2026
+=====================================================================
+Lo que pidió:
+  1. La definición de la función de calidad: fórmula, coeficientes y la
+     magnitud de la que depende cada término. Además: duración de la
+     evaluación, cuándo se corta y cómo se acumula (incremental, final o
+     mixta).
+  2. La imagen nueva funcionando: construida con el Dockerfile actualizado,
+     versión con pip show neat-python y el ejemplo XOR ejecutado dentro del
+     contenedor.
+
+Dónde está cada cosa:
+  config/p2_config.json   coeficientes de la calidad, duración, simulador
+  p2_neat.py              fórmula (puntos_banda, puntos_alineacion,
+                          puntos_paso, episodio_calidad)
+  config/p2_neat.ini      parámetros de NEAT
+  p2_xor.py               ejemplo XOR
+  docs/CAMBIOS.txt        entradas 22-30: todo lo hecho y por qué
+
+
+=====================================================================
+1. LA IMAGEN NUEVA FUNCIONANDO
+=====================================================================
+Qué hicimos:
+  - Descargamos el Dockerfile nuevo y reconstruimos la imagen:
+        .\build.ps1 -Pip
+    (-Pip rehace la capa de pip y, con ella, la de robobo_ros2; en el
+    registro del build se ve el clonado y la compilación de robobo_ros2).
+  - Recreamos el contenedor: docker compose down + .\start.ps1.
+
+Comprobación (dentro del contenedor):
+    pip show neat-python        -> Version: 2.0.0
+    python3 p2_xor.py           -> ejemplo XOR de NEAT-Python
+
+Resultado del XOR (semilla 1):
+  - Alcanza el umbral (calidad 3,9 de 4) en la generación 75.
+  - Red ganadora: 5 nodos y 11 conexiones, calidad 3,982.
+  - Tabla: (0,0) -> 0,074   (0,1) -> 0,999   (1,0) -> 1,000   (1,1) -> 0,114
+
+Problemas que encontramos en la imagen nueva (y cómo los resolvimos sin
+tocar el Dockerfile):
+  - No trae robobosim. Lo necesitan el nodo puente (aunque se lance sólo
+    con el módulo 'blob', importa robobosim) y nuestro reinicio de la
+    escena y verdad del terreno.  -> pip install --user robobosim
+  - Trae NumPy 2.5 (pip) y Matplotlib de Ubuntu, compilado para NumPy 1:
+    "import matplotlib" falla.  -> pip install --user --upgrade matplotlib
+  - Las dos instalaciones se pierden si el contenedor se recrea. Nos pasó
+    al lanzar start.ps1 desde la misma carpeta escrita con otras
+    mayúsculas: Docker Compose compara la ruta de los volúmenes como texto
+    y recrea el contenedor.
+
+
+=====================================================================
+2. LA FUNCIÓN DE CALIDAD
+=====================================================================
+
+2.1 Fórmula (formulación A, la que usamos)
+------------------------------------------
+En cada paso del episodio, con Δt = tiempo real que ha durado el paso:
+
+  banda(sep) = 1                                  si 0,20 <= sep <= 0,45 m
+             = K_FUERA · (sep - 0,12) / (0,20 - 0,12)  si sep < 0,20 m
+             = K_FUERA · (1 - (sep - 0,45) / (0,90 - 0,45))  si sep > 0,45 m
+             (nunca menor que 0)
+
+  alin(desv) = max(0, 1 - |desv| / DESV_MAX)
+
+  paso       = banda(sep) · (W_BANDA + W_DESV · alin(desv))
+
+  calidad    = 100 · Σ paso · Δt / (T · (W_BANDA + W_DESV))
+
+Rango teórico: 0 a 100 (100 = los T segundos dentro de la banda y con la
+pelota justo delante).
+
+Coeficientes (config/p2_config.json):
+  W_BANDA  = 1,0     peso de estar en la banda
+  W_DESV   = 0,5     peso de ir alineado con la pelota
+  K_FUERA  = 0,3     máximo de la rampa fuera de la banda
+  DESV_MAX = 45°     desviación a partir de la cual la alineación vale 0
+  T        = 30 s    duración máxima del episodio
+
+2.2 De qué depende cada término
+-------------------------------
+  Término     Magnitud                    Origen              A bordo se aproximaría con
+  ---------   -------------------------   -----------------   -------------------------------
+  banda       separación real seguidor-   simulador           size del blob (relación size-
+              pelota (m)                  (privilegiada)      distancia calibrada en la P1)
+  alin        desviación real: ángulo     simulador           posx del blob (en la P1 la
+              entre el rumbo del          (privilegiada)      correlación desviación-posx es
+              seguidor y la pelota (°)                        -0,93 a -0,96)
+
+  - El enunciado permite que la calidad use información privilegiada del
+    simulador (ap. 5): la red NUNCA la recibe. Su observación sigue siendo
+    la de la P1, [posx, size, posy] del blob.
+  - Se calculan como en el evaluador del anexo B (misma pelota, mismo
+    cálculo de separación y desviación), así que la calidad mide lo mismo
+    que la evaluación final.
+  - Inconveniente: esta calidad sólo existe en simulación; no permitiría
+    evolucionar en el robot real (evolución embodied). Con size y posx se
+    podría calcular una versión aproximada a bordo, pero el size es ruidoso
+    y ambiguo de cerca (ver 2.6).
+
+2.3 Duración de la evaluación
+-----------------------------
+  - 30 s como máximo por episodio, 1 episodio por individuo.
+  - Por qué 30 s:
+      * El anexo B usa 120 s, pero evaluar 20 individuos x 120 s sería una
+        hora por generación. Las indicaciones recomiendan 20-40 s.
+      * En 30 s el seguidor arranca, alcanza al guía y pasa la primera
+        curva (en nuestras pruebas la curva llega hacia los 12-15 s), donde
+        el guía frena y se para a veces.
+  - Coste medido: el reinicio de la escena tarda ~5 s (no 3 s como suponen
+    las indicaciones). Una generación dura como máximo 20 x (30 + 5) s =
+    11,7 min; la primera generación de prueba tardó 3,6 min porque las redes
+    aleatorias fallan en 3-5 s.
+  - Para la fase con paradas (C4) pensamos subirla a 40 s, para que aparezca
+    alguna parada en el episodio.
+
+2.4 Cuándo se corta el episodio
+-------------------------------
+Con los mismos fallos del anexo B, comprobados en cada paso:
+  - Colisión: separación < 0,12 m
+  - Guía perdido: separación > 0,90 m, o pelota sin detectar > 3 s seguidos
+  - Si no hay fallo: a los T = 30 s (completado)
+Por qué: así la calidad mide lo mismo que el protocolo de evaluación. Las
+terminaciones propias del entorno de la P1 (choque y pérdida estimados con
+el blob) se ignoran: el fin lo decide la verdad del terreno.
+
+2.5 Cómo se acumula
+-------------------
+  - Formulación A: INCREMENTAL. Se suma un término en cada paso, ponderado
+    por Δt. No hay bonificación ni penalización final: si el seguidor
+    falla, el episodio acaba y deja de sumar (penalización implícita).
+  - Formulación B (para comparar): MIXTA. El mismo término de banda por paso
+    (sin alineación) más una penalización final según el desenlace:
+    -20 si choca, -10 si pierde al guía. Rango -20 a 100.
+  - Por qué sumamos por tiempo real y no por pasos: un paso del entorno dura
+    ~0,4 s en la práctica (no los 0,2 s nominales) y varía con la
+    comunicación. Sumando Δt la calidad no depende de ese ritmo. El último
+    paso se recorta para no pasar de T (si no, la calidad podía superar 100).
+
+2.6 Por qué cada término y cada coeficiente
+-------------------------------------------
+  - banda (W_BANDA = 1): es el objetivo principal de la tarea (separación
+    dentro de la banda objetivo).
+  - Rampa fuera de la banda: las indicaciones piden distinguir desde la
+    primera generación al individuo que falla a los 2 s del que falla a
+    los 8 s. Con la rampa y la suma por tiempo, aguantar más o quedarse
+    más cerca de la banda siempre puntúa más.
+  - K_FUERA = 0,3: estar fuera de la banda tiene que valer mucho menos que
+    estar dentro (ver 2.7).
+  - alin (W_DESV = 0,5): llevar la pelota centrada reduce el riesgo de
+    perderla de vista y evita atajos como seguir a la pelota de lado o girar
+    sobre sí mismo. Pesa la mitad que la banda porque es secundario.
+  - alin multiplicada por banda: ir alineado sólo puntúa si además se está a
+    buena distancia; apuntar a una pelota lejana es fácil y no es la tarea.
+  - DESV_MAX = 45°: en la P1 la desviación de una política buena está casi
+    siempre por debajo de 15°; 45° da gradiente sin premiar desviaciones
+    grandes.
+  - Escala 0-100: NEAT-Python normaliza la calidad de cada especie dividiendo
+    por el rango de la población, que nunca es menor que 1. Con calidades
+    en [0, 1] la presión selectiva casi desaparecería (indicaciones ap. 4).
+  - Sin término de carril: la API de RoboboSim da poses, pero no la geometría
+    del carril; no tenemos con qué medirlo. El carril se juzga en los vídeos,
+    como en el anexo B.
+
+2.7 Evidencia: la evolución explotó la primera versión (A0)
+------------------------------------------------------------
+La primera calidad (A0) tenía la rampa completa fuera de la banda (K_FUERA
+= 1) y la alineación sumada aparte (no multiplicada por la banda).
+En la primera evolución de prueba (C3, semilla 0, generación 0), el genoma
+15 completó los 30 s a 0,57 m de media, con sólo el 6,6 % de los pasos en
+la banda, y obtuvo calidad 73: más que nuestro controlador a mano (69,4),
+que sí va en la banda cuando no choca. Es el atajo que avisa el enunciado
+(ap. 7): "quedarse en el límite de la separación permitida".
+Corrección: K_FUERA = 0,3 y alineación multiplicada por la banda.
+Casos calculados con la fórmula (pasos de 0,4 s, T = 30 s):
+
+                                           A0       A
+  30 s a 0,57 m (el atajo)                82,2     22,0
+  90 % a 0,40 m + 10 % a 0,50 m           99,3     93,2
+  perdido a los 4 s a 0,55 m              11,4      3,1
+  en la banda, choca a los 15 s           49,3     49,3
+
+El atajo pasa a valer 4 veces menos que hacer la tarea y la penalización
+implícita por chocar no cambia. A0 se conserva en p2_config.json como
+formulación descartada: es una comparación de formulaciones para la memoria.
+
+2.8 Referencia: controlador programado a mano
+---------------------------------------------
+No teníamos el código del reto, así que escribimos uno (p2_controladores.py):
+  - giro   a1 = 1,5 · posx
+  - avance fracción de V_MAX = 2,5 · (SIZE_OBJ - size) / SIZE_OBJ, en [0, 1]
+  - si no ve la pelota, se para
+(El signo del giro sale de la P1: en todas las evaluaciones de SAC, posx y
+el giro ordenado tienen correlación positiva.)
+
+Resultado en C3 (7 episodios, calidad A0): media 69,4; completa 4 de 7 con
+calidad 94-98; 3 colisiones.
+Con la calidad A: [RELLENAR tras: python3 p2_neat.py --reto --guia C3 --episodios 5]
+
+Por qué choca (lo comprobamos paso a paso con --detalle; las posiciones de
+la verdad del terreno son coherentes, las colisiones son reales):
+  1. El guía se detiene ~1,2 s en ciertos puntos de las curvas, también en
+     C3.
+  2. De cerca la pelota sale cortada del encuadre y el size BAJA en vez de
+     subir (0,228 m -> size 38; 0,254 m -> size 84; a 0,43 m ~124).
+  3. El controlador interpreta size bajo como "lejos", acelera a 0,25 m/s y
+     choca.
+Es la ambigüedad del size que en la P1 nos hizo añadir posy a la
+observación. El controlador a mano no usa posy; la red de NEAT sí la recibe,
+así que puede aprender a evitarlo.
+
+
+=====================================================================
+3. OTRAS DECISIONES (por si pregunta)
+=====================================================================
+  - Observación igual que en la P1: [posx, size, posy] (3 entradas de la red).
+    Así la comparación con SAC/PPO es directa.
+  - Acción igual que en la P1: avance y giro en [-1, 1] -> cmd_vel
+    (v en 0-0,25 m/s, w en ±0,5 rad/s). Salidas de la red con tanh, que da
+    [-1, 1] (en NEAT-Python, tanh(2,5·z)).
+  - NEAT: parámetros de las indicaciones (población 20, full_direct, elitismo
+    2, estancamiento 8...) salvo compatibility_threshold = 1,7 en vez de 3,0.
+    Con 3,0 sólo se formaba una especie (la distancia genética media de la
+    población inicial es ~1,0). Con 1,2 o menos aparecen más de 10 especies
+    y NEAT-Python 2.0 aborta (población 20 < especies x tamaño mínimo 2).
+    Con 1,7: entre 2 y 6 especies en un barrido sin simulador.
+  - Un único controlador para todas las configuraciones, por evolución
+    incremental: unas 15 generaciones con el guía en C3 y, desde el punto de
+    control, otras 15 en C4. RoboboSim no permite cambiar el modo del guía
+    desde código, así que se cambia a mano entre fases.
+  - Dos ordenadores, una semilla en cada uno (como mínimo 2 semillas).
+  - Simulador: multiplicador x1 y físicas simplificadas, igual que en la P1.
+  - Punto de control en cada generación; si el puente se cae, la evolución
+    se para (no se da calidad 0 al individuo) y se reanuda desde el último.
+
+
+=====================================================================
+4. QUÉ ENSEÑAR EN VIVO (dentro del contenedor)
+=====================================================================
+  pip show neat-python
+  python3 p2_xor.py
+  python3 p2_neat.py --reto --guia C3 --episodios 1 --detalle
+      (con el puente lanzado y RoboboSim en C3: se ve paso a paso la
+      separación, la desviación y la calidad del episodio)
+  cat config/p2_config.json

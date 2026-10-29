@@ -9,14 +9,19 @@ calidad usa información privilegiada del simulador (VerdadTerreno de
 p1_evaluar.py): la separación y la desviación reales respecto a la pelota.
 La red nunca la recibe; su observación sigue siendo [posx, size, posy].
 
-CALIDAD (config/p2_config.json, formulación A o B)
+CALIDAD (config/p2_config.json, formulación A, B o A0)
     En cada paso, con Δt el tiempo real del paso:
-      banda(sep)  1 dentro de [0,20, 0,45] m; fuera decrece linealmente
-                  hasta 0 en la colisión (0,12 m) y en guía perdido (0,90 m)
+      banda(sep)  1 dentro de [0,20, 0,45] m; fuera, K_FUERA · rampa lineal
+                  que vale 1 en el borde de la banda y 0 en la colisión
+                  (0,12 m) y en guía perdido (0,90 m)
       alin(desv)  max(0, 1 - |desv| / DESV_MAX_DEG)
-    calidad = 100 · Σ (W_BANDA·banda + W_DESV·alin)·Δt / (T · (W_BANDA + W_DESV))
+      paso        banda·(W_BANDA + W_DESV·alin)     si ALIN_POR_BANDA
+                  W_BANDA·banda + W_DESV·alin       si no (A0, descartada)
+    calidad = 100 · Σ paso·Δt / (T · (W_BANDA + W_DESV))
               - P_COLISION si choca - P_PERDIDO si pierde al guía
-    Rango [-P, 100]. El episodio acaba con los criterios del anexo B
+    Rango [-P, 100]. Con K_FUERA = 0,3 y la alineación ligada a la banda,
+    seguir de lejos sin entrar en ella puntúa poco (en A0, seguir a 0,57 m
+    puntuaba 73). El episodio acaba con los criterios del anexo B
     (colisión, guía perdido por distancia o > 3 s sin ver) o a los T s: los
     segundos no vividos no suman (penalización implícita), y la suma por
     tiempo distingue al que falla a los 2 s del que falla a los 8 s.
@@ -87,18 +92,29 @@ CAMPOS_EPISODIO = ['generacion', 'genoma', 'episodio', 'guia', 'calidad',
 # Calidad
 # =====================================================================
 
-def puntos_banda(sep):
-    """1 dentro de la banda; fuera, rampa lineal hasta 0 en los umbrales de fallo."""
+def puntos_banda(sep, k_fuera=1.0):
+    """1 dentro de la banda; fuera, k_fuera · rampa lineal hasta 0 en los umbrales de fallo."""
     p = PROTOCOLO
     if p['BANDA_MIN_M'] <= sep <= p['BANDA_MAX_M']:
         return 1.0
     if sep < p['BANDA_MIN_M']:
-        return max(0.0, (sep - p['COLISION_M']) / (p['BANDA_MIN_M'] - p['COLISION_M']))
-    return max(0.0, 1.0 - (sep - p['BANDA_MAX_M']) / (p['PERDIDO_M'] - p['BANDA_MAX_M']))
+        rampa = (sep - p['COLISION_M']) / (p['BANDA_MIN_M'] - p['COLISION_M'])
+    else:
+        rampa = 1.0 - (sep - p['BANDA_MAX_M']) / (p['PERDIDO_M'] - p['BANDA_MAX_M'])
+    return k_fuera * max(0.0, rampa)
 
 
 def puntos_alineacion(desv, desv_max):
     return max(0.0, 1.0 - abs(desv) / desv_max)
+
+
+def puntos_paso(sep, desv, cal):
+    """Puntos de un paso (sin Δt), en [0, W_BANDA + W_DESV]."""
+    banda = puntos_banda(sep, cal.get('K_FUERA', 1.0))
+    alin = puntos_alineacion(desv, cal['DESV_MAX_DEG'])
+    if cal.get('ALIN_POR_BANDA', False):
+        return banda * (cal['W_BANDA'] + cal['W_DESV'] * alin)
+    return cal['W_BANDA'] * banda + cal['W_DESV'] * alin
 
 
 def episodio_calidad(env, verdad, politica, cal, duracion):
@@ -131,8 +147,7 @@ def episodio_calidad(env, verdad, politica, cal, duracion):
         elif ahora - t0 >= duracion:
             desenlace = 'completado'
 
-        acum += (cal['W_BANDA'] * puntos_banda(sep)
-                 + cal['W_DESV'] * puntos_alineacion(desv, cal['DESV_MAX_DEG'])) * dt
+        acum += puntos_paso(sep, desv, cal) * dt
         if CTX.get('detalle'):
             print(f'    t {ahora - t0:5.2f}  sep {sep:.3f} m  desv {desv:+6.1f}°  '
                   f'seg ({seguidor[0]:7.1f}, {seguidor[1]:7.1f})  '
@@ -497,7 +512,7 @@ def main():
     a.add_argument('--generaciones', type=int, default=15)
     a.add_argument('--guia', choices=GUIAS, required=True,
                    help='configuración del guía puesta en RoboboSim (sólo se anota)')
-    a.add_argument('--calidad', choices=['A', 'B'], default=None,
+    a.add_argument('--calidad', choices=['A', 'B', 'A0'], default=None,
                    help='formulación de la calidad (por defecto, la de p2_config.json)')
     a.add_argument('--duracion', type=float, default=None,
                    help='segundos por episodio de evaluación (por defecto, DURACION_EVAL_S)')

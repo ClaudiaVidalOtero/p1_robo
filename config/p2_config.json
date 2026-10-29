@@ -5,19 +5,33 @@
   "AGREGACION": "media",
   "CALIDAD": "A",
   "CALIDADES": {
-    "A": {
-      "_descripcion": "banda gradual + alineacion; sin penalizacion explicita (la implicita es dejar de sumar)",
+    "A0": {
+      "_descripcion": "DESCARTADA (CAMBIOS 30): rampa completa fuera de la banda + alineacion sumada; seguir a 0,57 m sin entrar en la banda puntuaba 73",
       "W_BANDA": 1.0,
       "W_DESV": 0.5,
       "DESV_MAX_DEG": 45.0,
+      "K_FUERA": 1.0,
+      "ALIN_POR_BANDA": false,
+      "P_COLISION": 0.0,
+      "P_PERDIDO": 0.0
+    },
+    "A": {
+      "_descripcion": "fuera de la banda como mucho K_FUERA; alineacion multiplicada por el termino de banda; sin penalizacion explicita",
+      "W_BANDA": 1.0,
+      "W_DESV": 0.5,
+      "DESV_MAX_DEG": 45.0,
+      "K_FUERA": 0.3,
+      "ALIN_POR_BANDA": true,
       "P_COLISION": 0.0,
       "P_PERDIDO": 0.0
     },
     "B": {
-      "_descripcion": "solo banda gradual + penalizacion explicita por fallo",
+      "_descripcion": "solo banda (fuera como mucho K_FUERA) + penalizacion explicita por fallo",
       "W_BANDA": 1.0,
       "W_DESV": 0.0,
       "DESV_MAX_DEG": 45.0,
+      "K_FUERA": 0.3,
+      "ALIN_POR_BANDA": true,
       "P_COLISION": 20.0,
       "P_PERDIDO": 10.0
     }
