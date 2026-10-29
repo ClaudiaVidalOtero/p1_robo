@@ -133,6 +133,13 @@ def episodio_calidad(env, verdad, politica, cal, duracion):
 
         acum += (cal['W_BANDA'] * puntos_banda(sep)
                  + cal['W_DESV'] * puntos_alineacion(desv, cal['DESV_MAX_DEG'])) * dt
+        if CTX.get('detalle'):
+            print(f'    t {ahora - t0:5.2f}  sep {sep:.3f} m  desv {desv:+6.1f}°  '
+                  f'seg ({seguidor[0]:7.1f}, {seguidor[1]:7.1f})  '
+                  f'pelota ({pelota[0]:7.1f}, {pelota[1]:7.1f})  '
+                  f'blob {"sí" if info.get("visible") else "no"} posx {info.get("posx", 0.0):+.2f} '
+                  f'size {info.get("size_raw", 0.0):5.1f}  v {info.get("v", 0.0):.2f} '
+                  f'w {info.get("w", 0.0):+.2f}' + (f'  -> {desenlace}' if desenlace else ''))
         seps.append(sep)
         desvs.append(abs(desv))
         en_banda += int(p['BANDA_MIN_M'] <= sep <= p['BANDA_MAX_M'])
@@ -265,7 +272,8 @@ def preparar_contexto(args, carpeta=None):
     # Sin truncado del entorno: el fin lo deciden los criterios del anexo B.
     env = RoboboSeguidorEnv(pasos_max=10**9, usar_simulador=True, ruta_config=args.config)
     CTX.update(env=env, verdad=VerdadTerreno(c_env['SIM_IP']), p2=p2,
-               calidad=p2['CALIDADES'][p2['CALIDAD']], guia=args.guia)
+               calidad=p2['CALIDADES'][p2['CALIDAD']], guia=args.guia,
+               detalle=args.detalle)
     return env, c_env, p2
 
 
@@ -496,6 +504,8 @@ def main():
     a.add_argument('--episodios', type=int, default=3, help='--reto y --reevaluar')
     a.add_argument('--candidatos', type=int, default=5, help='--reevaluar')
     a.add_argument('--forzar', action='store_true', help='sobrescribir la carpeta')
+    a.add_argument('--detalle', action='store_true',
+                   help='una línea por paso con la verdad del terreno y el blob')
     a.add_argument('--nueva-config', action='store_true',
                    help='--reanudar con el p2_neat.ini de la carpeta, no el del punto de control')
     a.add_argument('--neat', default=RUTA_NEAT_INI)

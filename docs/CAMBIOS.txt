@@ -848,3 +848,40 @@ Decisiones del equipo (2026-10-28):
   - Por qué: entregable 9.4 (instrucciones para reproducir la evolución y
             ejecutar el controlador final).
   - Efecto: ninguno sobre el código.
+
+
+-----------------------------------------------------------------
+[2026-10-29] 29. Primeras pruebas con RoboboSim; --detalle en p2_neat.py
+-----------------------------------------------------------------
+  - Qué:    * p2_neat.py: opción --detalle (CTX['detalle']) que imprime en
+              cada paso t, separación, desviación, posiciones del seguidor y
+              de la pelota, blob visible, posx, size, v y w.
+            * p2_evol/referencias.csv: las dos tandas del reto en C3 (3 + 4
+              episodios) se juntan en una fila de 7 episodios: media 69,4
+              (min 4,07, max 98,22, desv. típica 34,6).
+  - Por qué: Resultados de las pruebas (guía C3, x1, físicas simplificadas):
+            * --comprobar: un genoma aleatorio, perdido_sin_ver a los 4,2 s,
+              9,0 s en total -> el reinicio tarda ~5 s (no 3 s como suponen
+              las indicaciones). Cota de generación: 20 x (30 + 5) s = 11,7 min.
+            * --reto: completa 4 de 7 episodios con calidad 94-98 (71-93 % en
+              banda); 3 colisiones (1,7 s, 15,6 s, 15,6 s).
+            * La colisión a 1,7 s parecía un error de la verdad del terreno.
+              Con --detalle se comprueba que no: las posiciones son
+              coherentes paso a paso y las colisiones son reales. Causa:
+                - el guía se detiene ~1,2 s en ciertos puntos de las curvas
+                  también en C3 (pelota quieta en (1580.8, 1281.9) y
+                  (1505.5, 1567.3) en varios episodios);
+                - de cerca la pelota sale cortada del encuadre y el size BAJA
+                  (0,228 m -> size 38; 0,254 m -> size 84; a 0,43 m ~124);
+                - el reto interpreta size bajo como "lejos", acelera a
+                  0,25 m/s y choca.
+              Es la ambigüedad de size que en la P1 motivó añadir posy a la
+              observación. El reto no usa posy; la red de NEAT sí la recibe.
+            * El size está muy cuantizado y es ruidoso (81/103/124/150 a
+              ~0,43 m).
+            * Al reiniciar, la separación es ~0,57 m y el guía tarda ~0,6 s en
+              arrancar: los descensos rápidos de separación al principio de
+              los episodios de la P1 eran reales (el seguidor se acerca).
+  - Efecto: la calidad A distingue bien (choque a 15 s -> ~47; completar ->
+            95-98). Para la memoria: el controlador del reto es una referencia
+            débil a corta distancia, y la red tiene que aprender a usar posy.
