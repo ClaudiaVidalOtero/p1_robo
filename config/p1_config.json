@@ -3,6 +3,8 @@
   "COLOR_BLOB": "green",
   "IMG_ANCHO": 100.0,
   "POSX_CENTRO": 50.0,
+  "POSX_SIGNO": -1.0,
+  "_POSX_SIGNO": "-1 desde 11/11/2026: en las trazas del reto en C3 posx y la desviacion tienen el mismo signo (en la P1, r = -0,95) y girar hacia posx aleja al seguidor de la pelota. Comprobar con --reto: si empeora, volver a 1",
   "SIZE_MAX": 330.0,
   "BANDA_PROTOCOLO_M": [
     0.2,

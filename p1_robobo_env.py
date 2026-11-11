@@ -12,7 +12,11 @@ OBSERVACIÓN (Box float32; sólo sensores del seguidor)
     [1] size = size_blob / SIZE_MAX                    en [0, 1]
     [2] posy = y_blob / IMG_ALTO                       en [0, 1]   (OBS_Y)
     [3] ir   = IR frontal máximo / IR_SATURACION       en [0, 1]   (OBS_IR)
+    [-1] posx_ult = posx de la última lectura con pelota  en [-1, 1]  (OBS_MEMORIA, va al final)
     Pelota no visible (o size < SIZE_MIN_VISTA): posx, size y posy valen 0.
+    posx_ult (P2) es preprocesado del propio sensor: con la pelota a la vista
+    vale posx; al perderla conserva el último posx visto, para que el
+    controlador sepa hacia qué lado se fue el guía (0 al empezar el episodio).
     posy distingue "pegado" (pelota cortada por abajo) de "lejos", que dan un
     size parecido.
 
@@ -90,6 +94,7 @@ CONFIG_POR_DEFECTO = {
 
     'IMG_ANCHO': 100.0,        # rango de x del blob (px)
     'POSX_CENTRO': 50.0,
+    'POSX_SIGNO': 1.0,         # -1 si la x del blob sale reflejada (ver CAMBIOS 35)
     'IMG_ALTO': 100.0,         # rango de y del blob (px)
     'SIZE_MAX': 330.0,         # normalización del size
 
@@ -123,6 +128,7 @@ CONFIG_POR_DEFECTO = {
 
     'OBS_Y': True,             # añade posy a la observación
     'OBS_IR': False,           # añade el IR frontal a la observación
+    'OBS_MEMORIA': False,      # añade el último posx visto (P2; la P1 no lo usa)
     'USAR_IR_CHOQUE': False,   # el IR frontal también detecta choque
     'IR_SATURACION': 1000.0,
     'IR_CHOQUE': 0.8,
@@ -256,12 +262,15 @@ class RoboboSeguidorEnv(gym.Env):
     metadata: ClassVar[dict] = {'render_modes': []}
 
     def __init__(self, pasos_max=None, usar_simulador=True, verbose=False,
-                 ruta_config=RUTA_CONFIG):
+                 ruta_config=RUTA_CONFIG, ajustes=None):
         super().__init__()
         if not HAY_INTERFACES_BLOB:
             raise RuntimeError(AVISO_SIN_BLOB)
 
         self.c = cargar_config(ruta_config)
+        # ajustes: claves que se sobrescriben sin tocar la calibración (la P2
+        # pasa aquí su bloque ENTORNO, p. ej. OBS_MEMORIA).
+        self.c.update(ajustes or {})
         self.pasos_max = int(pasos_max if pasos_max is not None else self.c['PASOS_MAX'])
         self.usar_simulador = usar_simulador
         self.verbose = verbose
@@ -290,13 +299,16 @@ class RoboboSeguidorEnv(gym.Env):
 
         self._t_ultimo_reset = None
 
-        # [posx, size] + [posy] si OBS_Y + [ir] si OBS_IR
+        # [posx, size] + [posy] si OBS_Y + [ir] si OBS_IR + [posx_ult] si OBS_MEMORIA
         bajo, alto = [-1.0, 0.0], [1.0, 1.0]
         if self.c.get('OBS_Y'):
             bajo.append(0.0)
             alto.append(1.0)
         if self.c.get('OBS_IR'):
             bajo.append(0.0)
+            alto.append(1.0)
+        if self.c.get('OBS_MEMORIA'):
+            bajo.append(-1.0)
             alto.append(1.0)
         self.observation_space = spaces.Box(
             low=np.array(bajo, dtype=np.float32),
@@ -466,13 +478,21 @@ class RoboboSeguidorEnv(gym.Env):
         if size is None:
             base = [0.0, 0.0] + ([0.0] if self.c.get('OBS_Y') else [])
         else:
-            posx = (self._blob[0] - self.c['POSX_CENTRO']) / self.c['POSX_CENTRO']
+            # POSX_SIGNO (calibración): -1 si la imagen sale reflejada, para que
+            # posx tenga siempre el convenio de la P1 (signo contrario a la
+            # desviación del evaluador; a1 > 0 gira hacia posx > 0).
+            posx = (self.c.get('POSX_SIGNO', 1.0)
+                    * (self._blob[0] - self.c['POSX_CENTRO']) / self.c['POSX_CENTRO'])
             base = [float(np.clip(posx, -1.0, 1.0)),
                     float(np.clip(size / self.c['SIZE_MAX'], 0.0, 1.0))]
             if self.c.get('OBS_Y'):
                 base.append(float(np.clip(self._blob[1] / self.c['IMG_ALTO'], 0.0, 1.0)))
         if self.c.get('OBS_IR'):
             base.append(self._ir_frontal())
+        if self.c.get('OBS_MEMORIA'):
+            # _ultimo_posx se actualiza en step() después de construir la
+            # observación: sin pelota, aquí aún vale el de la última lectura visible.
+            base.append(base[0] if size is not None else float(self._ultimo_posx))
         return np.array(base, dtype=np.float32)
 
     # -----------------------------------------------------------------

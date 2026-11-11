@@ -53,21 +53,32 @@ def controlador_sb3(algoritmo, ruta_modelo):
     return lambda obs: modelo.predict(obs, deterministic=True)[0]
 
 
-def controlador_reto(c_env, k_giro, k_vel):
+def controlador_reto(c_env, k_giro, k_vel, busqueda=None):
     """Controlador programado a mano, sólo con la observación.
 
     giro:    a1 = K_GIRO * posx (en la P1, posx y el giro de la política SAC
              tienen correlación positiva: con posx > 0 se gira con a1 > 0).
     avance:  fracción de V_MAX = K_VEL * (SIZE_OBJ - size) / SIZE_OBJ, en [0, 1]:
              se para al llegar al size objetivo y acelera si la pelota se aleja.
-    Sin pelota a la vista se detiene.
+    Sin pelota a la vista se detiene (versión original, la referencia).
+
+    busqueda (variante con memoria, sólo diagnóstico): sin pelota a la vista
+    gira sobre sí mismo hacia el lado del último posx visto, con
+    a1 = ±busqueda['A_GIRO'], si |posx_ult| >= busqueda['POSX_MIN']; si la
+    perdió centrada (se acercó demasiado) se queda parado. Guarda el último
+    posx visto en la propia función: es lo mismo que posx_ult (OBS_MEMORIA).
     """
     size_obj = c_env['SIZE_OBJ'] / c_env['SIZE_MAX']   # en unidades de obs[1]
+    memoria = {'posx': 0.0}
 
     def politica(obs):
         posx, size = float(obs[0]), float(obs[1])
         if size <= 0.0:
+            ult = memoria['posx']
+            if busqueda and abs(ult) >= busqueda['POSX_MIN']:
+                return np.array([-1.0, np.sign(ult) * busqueda['A_GIRO']], dtype=np.float32)
             return np.array([-1.0, 0.0], dtype=np.float32)
+        memoria['posx'] = posx
         frac = np.clip(k_vel * (size_obj - size) / size_obj, 0.0, 1.0)
         a0 = 2.0 * frac - 1.0       # inversa de v = V_MIN + (a0+1)/2·(V_MAX-V_MIN)
         a1 = np.clip(k_giro * posx, -1.0, 1.0)

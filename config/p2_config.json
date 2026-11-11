@@ -1,7 +1,8 @@
 {
   "_descripcion": "Configuracion de la evolucion de la Practica 2 (p2_neat.py). Las constantes del sensor y de la accion siguen en p1_config.json. Las calidades usan informacion privilegiada del simulador (separacion y desviacion reales a la pelota).",
   "DURACION_EVAL_S": 30.0,
-  "EPISODIOS_POR_INDIVIDUO": 1,
+  "_EPISODIOS_POR_INDIVIDUO": "2 desde s1: con 1 la calidad de un mismo genoma variaba de 31,9 a 2,8 y el mejor de cada generacion era el de mas suerte (s0)",
+  "EPISODIOS_POR_INDIVIDUO": 2,
   "AGREGACION": "media",
   "CALIDAD": "A",
   "CALIDADES": {
@@ -43,7 +44,16 @@
   "RETO": {
     "_descripcion": "controlador programado a mano (referencia): giro proporcional a posx, avance proporcional al error de size",
     "K_GIRO": 1.5,
-    "K_VEL": 2.5
+    "K_VEL": 2.5,
+    "BUSQUEDA": {
+      "_descripcion": "variante con memoria (--busqueda, solo diagnostico): sin pelota gira hacia el ultimo posx visto con a1 = +-A_GIRO si |posx_ult| >= POSX_MIN; la referencia sigue siendo el reto original",
+      "A_GIRO": 1.0,
+      "POSX_MIN": 0.2
+    }
+  },
+  "ENTORNO": {
+    "_descripcion": "claves que se sobrescriben en p1_config.json solo para la P2 (sin tocar la calibracion). OBS_MEMORIA anade a la observacion el ultimo posx visto (preprocesado del propio sensor, existe en el robot real): sin el, al perder la pelota en un giro la observacion es [0,0,0] y la red no sabe hacia donde girar (reto en C3, 11/11). Con OBS_MEMORIA, num_inputs = 4 en p2_neat.ini",
+    "OBS_MEMORIA": true
   },
   "SIM": {
     "_descripcion": "declarar en la memoria; debe coincidir en evolucion, evaluacion y comparacion con la P1",

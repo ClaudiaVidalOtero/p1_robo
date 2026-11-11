@@ -1,0 +1,8 @@
+controlador,guia,calidad,duracion_s,episodios,cal_media,cal_min,cal_max
+reto,C3,A0,30.0,7,69.4,4.07,98.22
+reto,C3,A,30.0,3,12.934,9.556,18.362
+reto,C3,A,30.0,2,14.629,7.788,21.47
+reto,C3,A,30.0,2,3.667,2.866,4.469
+reto,C3,A,30.0,2,5.901,3.859,7.943
+reto_busqueda,C3,A,30.0,3,6.837,2.014,9.278
+reto_busqueda,C3,A,30.0,3,11.096,2.98,22.22

@@ -944,3 +944,119 @@ Decisiones del equipo (2026-10-28):
   - Efecto: XOR en el contenedor, semilla 1: umbral en la generación 75, red
             de 5 nodos y 11 conexiones, calidad 3,982 de 4; salidas 0,074 /
             0,999 / 1,000 / 0,114 para (0,0) / (0,1) / (1,0) / (1,1).
+
+
+-----------------------------------------------------------------
+[2026-11-11] 32. Calidad: corte si el guía no arranca
+-----------------------------------------------------------------
+  - Qué:    p2_neat.py (episodio_calidad): se lee la pose del guía; si no se
+            ha movido más de MOV_ARRANQUE_MM (50 mm) en T_ARRANQUE_MAX_S
+            (10 s) el episodio acaba con desenlace 'sin_arrancar' y se resta
+            P_SIN_ARRANCAR (10). config/p2_config.json: ambos parámetros en
+            las calidades A y B. p2_graficas.py: 'sin_arrancar' como causa
+            de fin propia.
+  - Por qué: el guía espera parado hasta que el seguidor se acerca. En la
+            primera s0 (guardada como p2_evol/s0_quieto) los genomas 34, 56
+            y 86 se quedaban quietos a 0,6447 m, el guía no arrancaba y
+            completaban los 30 s con calidad 17,007, más que el controlador
+            del reto (12,9). Es el "detenerse si eso evita el fallo" del
+            apartado 7 del enunciado.
+  - Efecto: quedarse quieto pasa de 17,07 a -4,3 (prueba sin simulador). En
+            la nueva s0 sólo 9 de 300 episodios acaban 'sin_arrancar'.
+
+
+-----------------------------------------------------------------
+[2026-11-11] 33. Menos especies y 2 episodios por individuo (desde s1)
+-----------------------------------------------------------------
+  - Qué:    config/p2_neat.ini: compatibility_threshold 1,7 -> 2,5.
+            config/p2_config.json: EPISODIOS_POR_INDIVIDUO 1 -> 2 (media).
+  - Por qué: s0 (C3, calidad A, 15 generaciones, 300 episodios): ningún
+            episodio completado (máximo 18 s de 30); la calidad media se
+            estanca en 6-7 desde la generación 5 y el mejor oscila (29 ->
+            14). Causas: (1) las distancias genéticas crecen (media 1,27 en
+            g0, 2,03 en g14) y las especies pasan de 2 a 8, con 2-3
+            individuos cada una; (2) con un solo episodio la calidad de un
+            genoma es muy ruidosa (31,9 y 2,8 para el mismo genoma) y se
+            elige al de más suerte. Con las distancias de los puntos de
+            control de s0, 2,5 deja 1 especie al principio y 2-4 al final.
+            Fallo dominante en s0: pérdida de vista (56 %) con desviación
+            media de ~44° en los mejores episodios: pierden al guía en los
+            giros.
+  - Efecto: cada generación tarda el doble (unos 7-8 min en vez de 3,5-4).
+            s0 se conserva como ejecución con la configuración anterior.
+
+
+-----------------------------------------------------------------
+[2026-11-11] 34. Observación con memoria del último posx visto (P2, desde s1)
+-----------------------------------------------------------------
+  - Qué:    * p1_robobo_env.py: opción OBS_MEMORIA (por defecto false, la P1
+              no cambia) que añade al final de la observación posx_ult: posx
+              si la pelota se ve; si no, el último posx visto (0 al empezar).
+              Parámetro nuevo ajustes= del constructor para sobrescribir
+              claves sin tocar p1_config.json (la calibración).
+            * config/p2_config.json: bloque ENTORNO {OBS_MEMORIA: true}, que
+              p2_neat.py pasa al entorno; p2_evaluar.py usa el de la carpeta
+              del genoma (s0 no lo tiene: sigue con 3 entradas).
+              config/p2_neat.ini: num_inputs 3 -> 4.
+            * p2_controladores.controlador_reto: variante --busqueda (sólo
+              diagnóstico; la referencia sigue siendo el reto original): sin
+              pelota gira sobre sí mismo hacia el último posx visto (a1 = ±1
+              si |posx_ult| >= 0,2); si la perdió centrada, se queda parado.
+            * p2_graficas.py: la cuarta entrada se llama posx_ult.
+  - Por qué: traza del reto en C3 (--reto --detalle, 2 episodios, calidad
+            media 14,6, ninguno completado): el guía gira, la desviación pasa
+            de -20° a -40° en 0,4 s, la pelota sale del campo de la cámara
+            (~±35°) y la observación pasa a ser [0, 0, 0]; el controlador no
+            sabe hacia dónde se fue y se para hasta los 3 s sin ver (la
+            desviación queda clavada en -45°). W_MAX no limita: el giro sólo
+            se satura un paso. Ningún controlador sin memoria puede
+            resolverlo, sea a mano o evolucionado; en s0 el 56 % de los
+            episodios acabó en pérdida de vista.
+            Enunciado P2: ap. 5 permite rediseñar el espacio de observación
+            justificándolo; ap. 7 permite el preprocesado de la observación
+            dentro del entorno, declarándolo. posx_ult sale sólo del sensor
+            del seguidor y existe igual en el robot real.
+  - Efecto: (sin simulador) con la pelota perdida por la izquierda la
+            observación es [0, 0, 0, -0,62] y el reto con búsqueda gira con
+            a1 = -1; perdida centrada, se queda parado. Pendiente medir en el
+            simulador el reto con búsqueda antes de lanzar s1.
+
+
+-----------------------------------------------------------------
+[2026-11-11] 35. POSX_SIGNO: la x del blob sale reflejada respecto a la P1
+-----------------------------------------------------------------
+  - Qué:    p1_robobo_env.py: posx = POSX_SIGNO · (x - POSX_CENTRO) /
+            POSX_CENTRO (por defecto 1). config/p1_config.json: POSX_SIGNO
+            = -1 (parámetro de calibración; importar_calibracion lo conserva).
+  - Por qué: trazas del reto con y sin --busqueda en C3 (11/11):
+            * posx y la desviación del evaluador tienen el MISMO signo
+              (posx -0,78 con -23,9°; +0,20 con +4,4°). En la P1 tenían signo
+              contrario: r(posx, desv) = -0,93 / -0,95 en
+              P1/p1_logs/eval_sac_s*_C*.csv.
+            * Al girar con a1 del signo de posx (convenio con el que la P1
+              seguía al guía: r(posx, a1) = +0,19 a +0,54) el seguidor se
+              aleja de la pelota: con el guía en línea recta (x ≈ 1579 mm) y
+              el seguidor casi parado, |desv| crece de 8° a 40° en 1,2 s; con
+              la búsqueda, de 15° a 96° y de 40° a 169°. Comprobado también
+              con el desplazamiento del seguidor (no depende de rotation.y).
+            Una sola causa explica las dos cosas: la x del blob está
+            reflejada respecto a la P1 (probablemente por la imagen o
+            versión nueva del contenedor/simulador). Con POSX_SIGNO = -1 la
+            observación vuelve al convenio de la P1, con el que funcionan el
+            reto y las políticas SAC/PPO (necesario para la comparación del
+            ap. 6.5).
+  - Efecto: las evoluciones s0_quieto y s0 se hicieron con la posx reflejada;
+            sus genomas no se pueden reevaluar con POSX_SIGNO = -1 (habría
+            que poner 1). Las referencias del reto anteriores en
+            p2_evol/referencias.csv (12,9; 14,6; 5,9) se midieron con el giro
+            al revés: hay que repetirlas. PENDIENTE: confirmar con --reto que
+            ahora la desviación tiene signo contrario a posx y que gira hacia
+            la pelota.
+
+  - Comprobación (11/11, --reto --busqueda, C3, 3 episodios): posx y la
+            desviación ya tienen signo contrario (posx -0,72 con +22,1°;
+            +0,10 con -3,4°) y el seguidor gira hacia la pelota. Calidad A
+            media 27,3 (12,7 / 47,5 / 21,7; antes 5,9), un episodio de 20,8 s.
+            Las 7 referencias medidas con la posx reflejada se han movido de
+            p2_evol/referencias.csv a p2_evol/referencias_posx_reflejada.csv
+            (evidencia; las gráficas sólo leen la primera).

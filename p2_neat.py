@@ -305,7 +305,11 @@ def preparar_contexto(args, carpeta=None):
         p2['CALIDAD'] = args.calidad
     c_env = cargar_config(args.config)
     # Sin truncado del entorno: el fin lo deciden los criterios del anexo B.
-    env = RoboboSeguidorEnv(pasos_max=10**9, usar_simulador=True, ruta_config=args.config)
+    # ENTORNO: ajustes de la P2 sobre la configuración de la P1 (OBS_MEMORIA).
+    # Con carpeta, los de la copia de la evolución: s0 no tiene el bloque y
+    # sigue con 3 entradas.
+    env = RoboboSeguidorEnv(pasos_max=10**9, usar_simulador=True, ruta_config=args.config,
+                            ajustes=p2.get('ENTORNO'))
     CTX.update(env=env, verdad=VerdadTerreno(c_env['SIM_IP']), p2=p2,
                calidad=p2['CALIDADES'][p2['CALIDAD']], guia=args.guia,
                detalle=args.detalle)
@@ -324,7 +328,7 @@ def comprobar_dimensiones(env, config_neat):
     if config_neat.genome_config.num_inputs != n_obs:
         raise SystemExit(f'num_inputs = {config_neat.genome_config.num_inputs} en la '
                          f'configuración de NEAT, pero la observación tiene {n_obs} '
-                         'componentes (revisa OBS_Y / OBS_IR).')
+                         'componentes (revisa OBS_Y / OBS_IR / ENTORNO.OBS_MEMORIA).')
 
 
 def aviso_simulador(p2, args):
@@ -456,10 +460,12 @@ def modo_reto(args):
     try:
         aviso_simulador(p2, args)
         r = p2['RETO']
-        politica = controlador_reto(c_env, r['K_GIRO'], r['K_VEL'])
-        calidades = [evaluar_individuo(politica, 'reto', 1) for _ in range(args.episodios)]
+        busqueda = r.get('BUSQUEDA') if args.busqueda else None
+        politica = controlador_reto(c_env, r['K_GIRO'], r['K_VEL'], busqueda)
+        nombre = 'reto_busqueda' if busqueda else 'reto'
+        calidades = [evaluar_individuo(politica, nombre, 1) for _ in range(args.episodios)]
         media = statistics.mean(calidades)
-        print(f'Controlador del reto en {args.guia}: calidad media {media:.2f} '
+        print(f'Controlador {nombre} en {args.guia}: calidad media {media:.2f} '
               f'(min {min(calidades):.2f}, max {max(calidades):.2f}, {len(calidades)} ep.)')
         ruta = os.path.join(RUTA_EVOL, 'referencias.csv')
         os.makedirs(RUTA_EVOL, exist_ok=True)
@@ -469,7 +475,7 @@ def modo_reto(args):
             if nuevo:
                 w.writerow(['controlador', 'guia', 'calidad', 'duracion_s',
                             'episodios', 'cal_media', 'cal_min', 'cal_max'])
-            w.writerow(['reto', args.guia, p2['CALIDAD'], p2['DURACION_EVAL_S'],
+            w.writerow([nombre, args.guia, p2['CALIDAD'], p2['DURACION_EVAL_S'],
                         len(calidades), round(media, 3), round(min(calidades), 3),
                         round(max(calidades), 3)])
         print(f'Anotado en {ruta}')
@@ -541,6 +547,8 @@ def main():
                    help='segundos por episodio de evaluación (por defecto, DURACION_EVAL_S)')
     a.add_argument('--episodios', type=int, default=3, help='--reto y --reevaluar')
     a.add_argument('--candidatos', type=int, default=5, help='--reevaluar')
+    a.add_argument('--busqueda', action='store_true',
+                   help='--reto: variante que, sin pelota, gira hacia el último posx visto')
     a.add_argument('--forzar', action='store_true', help='sobrescribir la carpeta')
     a.add_argument('--detalle', action='store_true',
                    help='una línea por paso con la verdad del terreno y el blob')

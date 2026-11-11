@@ -58,7 +58,8 @@ RUTA_SALIDA = 'p2_graficas'
 ORDEN_CONFIG = ['C1', 'C2', 'C3', 'C4']
 PATRON = re.compile(r'^eval_(?P<et>.+)_(?P<cfg>C[1-4])\.csv$')
 
-NOMBRES_ENTRADA = ['posx', 'size', 'posy']
+# posx_ult sólo existe con OBS_MEMORIA (desde s1); con 3 entradas zip la ignora.
+NOMBRES_ENTRADA = ['posx', 'size', 'posy', 'posx_ult']
 NOMBRES_SALIDA = ['avance a0', 'giro a1']
 
 # Parada del guía (anexo B.1) y paradas superadas (B.4).

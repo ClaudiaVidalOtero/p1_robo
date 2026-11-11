@@ -83,7 +83,9 @@ def construir_controlador(args, env, c_env):
         return controlador_sb3(args.sb3, args.modelo), args.etiqueta or f'p1_{nombre}'
     if args.reto:
         r = cargar_config_p2(args.config_p2)['RETO']
-        return controlador_reto(c_env, r['K_GIRO'], r['K_VEL']), args.etiqueta or 'reto'
+        busqueda = r.get('BUSQUEDA') if args.busqueda else None
+        return (controlador_reto(c_env, r['K_GIRO'], r['K_VEL'], busqueda),
+                args.etiqueta or ('reto_busqueda' if busqueda else 'reto'))
     return controlador_aleatorio(env), args.etiqueta or 'aleatorio'
 
 
@@ -156,6 +158,8 @@ def main():
     a.add_argument('--config', default=RUTA_CONFIG, help='configuración del entorno (P1)')
     a.add_argument('--config-p2', default=RUTA_CONFIG_P2)
     a.add_argument('--detalle', action='store_true', help='una línea por paso')
+    a.add_argument('--busqueda', action='store_true',
+                   help='--reto: variante que, sin pelota, gira hacia el último posx visto')
     a.add_argument('--real', action='store_true',
                    help='robot real: sin simulador, reinicio manual (apartado 6.6)')
     a.add_argument('--episodios', type=int, default=None,
@@ -163,12 +167,20 @@ def main():
     args = a.parse_args()
 
     c_env = cargar_config(args.config)
+    # Una red de NEAT se evalúa con la observación con la que evolucionó: el
+    # bloque ENTORNO (OBS_MEMORIA) de la p2_config.json de su carpeta. La
+    # política de la P1, el reto y el aleatorio usan la observación de la P1.
+    ajustes = None
+    if args.neat:
+        ruta_p2 = os.path.join(os.path.dirname(args.neat), 'p2_config.json')
+        ajustes = cargar_config_p2(ruta_p2 if os.path.exists(ruta_p2)
+                                   else args.config_p2).get('ENTORNO')
     env = RoboboSeguidorEnv(pasos_max=10**9, usar_simulador=not args.real,
-                            ruta_config=args.config)
+                            ruta_config=args.config, ajustes=ajustes)
     verdad = None
     try:
         politica, etiqueta = construir_controlador(args, env, c_env)
-        if env.observation_space.shape[0] != 3 and not args.aleatorio:
+        if env.observation_space.shape[0] != 3 and args.sb3:
             print('Aviso: la observación no tiene 3 componentes; revisa OBS_Y / OBS_IR.')
         os.makedirs(RUTA_LOGS_P2, exist_ok=True)
         if args.real:
