@@ -19,6 +19,10 @@ CALIDAD (config/p2_config.json, formulación A, B o A0)
                   W_BANDA·banda + W_DESV·alin       si no (A0, descartada)
     calidad = 100 · Σ paso·Δt / (T · (W_BANDA + W_DESV))
               - P_COLISION si choca - P_PERDIDO si pierde al guía
+    Sin arranque: el guía espera parado hasta que el seguidor se acerca. Si
+    no se ha movido más de MOV_ARRANQUE_MM en T_ARRANQUE_MAX_S, el episodio
+    acaba ('sin_arrancar') y se resta P_SIN_ARRANCAR: quedarse quieto a
+    0,64 m completaba los 30 s con calidad 17 (genomas 34, 56, 86 de s0).
     Rango [-P, 100]. Con K_FUERA = 0,3 y la alineación ligada a la banda,
     seguir de lejos sin entrar en ella puntúa poco (en A0, seguir a 0,57 m
     puntuaba 73). El episodio acaba con los criterios del anexo B
@@ -51,6 +55,7 @@ import argparse
 import csv
 import glob
 import json
+import math
 import os
 import pickle
 import re
@@ -82,6 +87,9 @@ CONTADOR = {'pasos': 0, 'evaluaciones': 0}
 # Checkpointer serializa los registros con pickle y el entorno no se puede.
 CTX = {'env': None, 'verdad': None, 'p2': None, 'calidad': None,
        'guia': None, 'gen': 0, 'ruta_episodios': None}
+
+# Desplazamiento del guía (mm) a partir del cual se considera que ha arrancado.
+MOV_ARRANQUE_MM = 50.0
 
 CAMPOS_EPISODIO = ['generacion', 'genoma', 'episodio', 'guia', 'calidad',
                    'desenlace', 'segundos', 'pasos', 'sep_media', 'pct_banda',
@@ -125,10 +133,18 @@ def episodio_calidad(env, verdad, politica, cal, duracion):
     t0 = t_prev = t_visto = time.time()
     acum, pasos, desenlace = 0.0, 0, None
     seps, desvs, en_banda = [], [], 0
+    # El guía espera parado hasta que el seguidor se acerca: si no arranca en
+    # T_ARRANQUE_MAX_S, el episodio acaba (quedarse quieto no es completar).
+    t_arranque_max = cal.get('T_ARRANQUE_MAX_S')
+    guia0, arrancado = None, False
 
     while desenlace is None:
         obs, _, _, _, info = env.step(politica(obs))
-        seguidor, _, pelota = verdad.leer()
+        seguidor, guia, pelota = verdad.leer()
+        if guia0 is None:
+            guia0 = guia
+        arrancado = arrancado or math.hypot(guia[0] - guia0[0],
+                                            guia[1] - guia0[1]) > MOV_ARRANQUE_MM
         ahora = time.time()
         # El último paso no puede sumar más allá de T: calidad <= 100.
         dt = min(ahora, t0 + duracion) - min(t_prev, t0 + duracion)
@@ -144,6 +160,8 @@ def episodio_calidad(env, verdad, politica, cal, duracion):
             desenlace = 'perdido_distancia'
         elif ahora - t_visto > p['SIN_VER_S']:
             desenlace = 'perdido_sin_ver'
+        elif t_arranque_max and not arrancado and ahora - t0 >= t_arranque_max:
+            desenlace = 'sin_arrancar'
         elif ahora - t0 >= duracion:
             desenlace = 'completado'
 
@@ -165,6 +183,8 @@ def episodio_calidad(env, verdad, politica, cal, duracion):
         calidad -= cal['P_COLISION']
     elif desenlace.startswith('perdido'):
         calidad -= cal['P_PERDIDO']
+    elif desenlace == 'sin_arrancar':
+        calidad -= cal.get('P_SIN_ARRANCAR', 0.0)
     resumen = {
         'calidad': round(calidad, 3), 'desenlace': desenlace,
         'segundos': round(time.time() - t0, 2), 'pasos': pasos,

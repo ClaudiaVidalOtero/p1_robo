@@ -217,15 +217,19 @@ def figura_causas(ev, salida):
         return False
     filas = leer_csv(ruta)
     gens = sorted({int(f['generacion']) for f in filas})
-    frac = {c: np.zeros(len(gens)) for c in CAUSAS}
+    # Causas del anexo B más 'sin_arrancar', propia de la calidad de la P2.
+    causas = CAUSAS[:-1] + ['sin_arrancar', 'otra']
+    etiquetas = {**ETIQUETA_CAUSA, 'sin_arrancar': 'el guía no arranca'}
+    colores = {**COLOR_CAUSA, 'sin_arrancar': '#8e24aa'}
+    frac = {c: np.zeros(len(gens)) for c in causas}
     for i, g in enumerate(gens):
         de_g = [f['desenlace'] for f in filas if int(f['generacion']) == g]
         for d in de_g:
             frac[d if d in frac else 'otra'][i] += 1.0 / len(de_g)
     fig, ax = plt.subplots(figsize=(8, 3.5))
-    ax.stackplot(gens, [frac[c] for c in CAUSAS],
-                 labels=[ETIQUETA_CAUSA[c] for c in CAUSAS],
-                 colors=[COLOR_CAUSA[c] for c in CAUSAS])
+    ax.stackplot(gens, [frac[c] for c in causas],
+                 labels=[etiquetas[c] for c in causas],
+                 colors=[colores[c] for c in causas])
     ax.set_xlabel('Generación')
     ax.set_ylabel('Fracción de episodios')
     ax.set_ylim(0, 1)
