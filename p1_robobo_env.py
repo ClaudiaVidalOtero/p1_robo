@@ -142,6 +142,9 @@ CONFIG_POR_DEFECTO = {
 def cargar_config(ruta=RUTA_CONFIG):
     """Lee p1_config.json y completa las claves que falten con los valores de reserva."""
     c = dict(CONFIG_POR_DEFECTO)
+    if ruta and not os.path.exists(ruta):
+        # Sin el archivo, el entorno funcionaría con constantes sin calibrar.
+        print(f'AVISO: no existe {ruta}; se usan los valores de reserva (sin calibrar).')
     if ruta and os.path.exists(ruta):
         with open(ruta, encoding='utf-8') as f:
             c.update(json.load(f))

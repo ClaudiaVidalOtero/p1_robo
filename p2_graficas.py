@@ -21,12 +21,22 @@ RED
 ANEXO B (p2_logs/eval_<etiqueta>_<C>.csv, escritos por p2_evaluar.py)
     tabla_anexo_b_p2.md/.csv   métricas de la P1 por configuración + TOTAL, y
                                las paradas de C4
+COMPARACIÓN CON LA P1 (apartado 6.5)
+    tabla_comparacion_p1.md    parámetros de la política SB3 frente a nodos y
+                               conexiones de la red; pasos y horas de cada técnica
+ROBOT REAL (p2_logs/real_<etiqueta>_<C>.csv, p2_evaluar.py --real)
+    tabla_real.md              desenlaces, % de pasos viendo la pelota, % en banda
+                               estimado por el size y |posx| medio
 
 USO
     python3 p2_graficas.py --evol s0 s1 s2
     python3 p2_graficas.py --red p2_evol/s0/mejor_genoma.pkl
     python3 p2_graficas.py --anexo-b                    # todas las etiquetas de p2_logs/
     python3 p2_graficas.py --anexo-b neat_s0 p1_sac_s0 reto aleatorio
+    python3 p2_graficas.py --comparar --sb3 sac P1/modelos/p1_modelo_sac_s0.zip \\
+        --monitor P1/p1_logs/monitor_sac_s0.monitor.csv \\
+        --genoma p2_evol/s0/mejor_genoma.pkl --evol s0 s1
+    python3 p2_graficas.py --real
 """
 
 import argparse
@@ -476,6 +486,111 @@ def modo_anexo_b(etiquetas, dir_salida):
     print('\n'.join(md))
 
 
+# =====================================================================
+# Comparación con la P1 (apartado 6.5): tamaño y coste
+# =====================================================================
+
+def parametros_sb3(algoritmo, ruta_modelo):
+    """(parámetros totales de la política, parámetros usados al actuar)."""
+    from stable_baselines3 import PPO, SAC
+    pol = (PPO if algoritmo == 'ppo' else SAC).load(ruta_modelo.removesuffix('.zip')).policy
+    total = sum(p.numel() for p in pol.parameters())
+    if algoritmo == 'sac':
+        # Al actuar sólo interviene el actor; los críticos sólo entrenan.
+        actor = sum(p.numel() for p in pol.actor.parameters())
+    else:
+        actor = (sum(p.numel() for p in pol.mlp_extractor.policy_net.parameters())
+                 + sum(p.numel() for p in pol.action_net.parameters()))
+    return total, actor
+
+
+def coste_monitor(ruta):
+    """(pasos, segundos) de un entrenamiento de la P1 a partir de su CSV de Monitor."""
+    with open(ruta, encoding='utf-8') as f:
+        filas = list(csv.DictReader(line for line in f if not line.startswith('#')))
+    if not filas:
+        return 0, 0.0
+    return sum(int(f['l']) for f in filas), float(filas[-1]['t'])
+
+
+def tamano_neat(ruta_genoma):
+    """(nodos sin entradas, conexiones activas, parámetros = pesos + sesgos)."""
+    with open(ruta_genoma, 'rb') as f:
+        genoma = pickle.load(f)
+    nodos, conexiones = genoma.size()
+    return nodos, conexiones, nodos + conexiones
+
+
+def modo_comparar(args, dir_salida):
+    lineas = ['| Controlador | Tamaño | Parámetros | Pasos del entorno | Horas de reloj |',
+              '|---|---|---|---|---|']
+    if args.sb3:
+        alg, modelo = args.sb3
+        total, actor = parametros_sb3(alg, modelo)
+        pasos = horas = 0.0
+        for ruta in args.monitor or []:
+            p, s = coste_monitor(ruta)
+            pasos, horas = pasos + p, horas + s / 3600.0
+        n = len(args.monitor or [])
+        lineas.append(f'| P1 {alg.upper()} ({os.path.basename(modelo)}) | red fija, '
+                      f'{total} parámetros en la política | {actor} (actor) | '
+                      f'{int(pasos)} ({n} entrenamiento/s) | {horas:.2f} |')
+    if args.genoma:
+        nodos, conexiones, params = tamano_neat(args.genoma)
+        pasos = horas = 0.0
+        for nombre in args.evol or []:
+            ev = leer_evolucion(nombre)
+            pasos += ev['pasos'][-1]
+            horas += ev['segundos'][-1] / 3600.0
+        n = len(args.evol or [])
+        lineas.append(f'| P2 NEAT ({args.genoma}) | {nodos} nodos, {conexiones} conexiones '
+                      f'activas | {params} (pesos + sesgos) | {int(pasos)} ({n} evolución/es) '
+                      f'| {horas:.2f} |')
+    lineas += ['', 'Pasos y horas: suma de todos los entrenamientos/evoluciones indicados '
+               '(--monitor, --evol). Parámetros de NEAT: conexiones activas + sesgos de los '
+               'nodos no de entrada (la respuesta no muta).']
+    with open(os.path.join(dir_salida, 'tabla_comparacion_p1.md'), 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lineas) + '\n')
+    print('\n'.join(lineas))
+
+
+# =====================================================================
+# Robot real (apartado 6.6)
+# =====================================================================
+
+def modo_real(dir_salida):
+    """Tabla con lo medible a bordo a partir de p2_logs/real_<etiqueta>_<C>.csv."""
+    patron = re.compile(r'^real_(?P<et>.+)_(?P<cfg>C[1-4])\.csv$')
+    lineas = ['| Controlador | Config | Episodios | Desenlaces | Duración media (s) '
+              '| % pasos con la pelota vista | % en banda (por size) | posx medio (abs) |',
+              '|---|---|---|---|---|---|---|---|']
+    for ruta in sorted(glob.glob(os.path.join(RUTA_LOGS_P2, 'real_*.csv'))):
+        m = patron.match(os.path.basename(ruta))
+        filas = leer_csv(ruta) if m else []
+        if not filas:
+            continue
+        episodios = {}
+        for f in filas:
+            episodios.setdefault(f['episodio'], []).append(f)
+        desenlaces = {}
+        for pasos in episodios.values():
+            d = pasos[-1]['desenlace'] or 'sin terminar'
+            desenlaces[d] = desenlaces.get(d, 0) + 1
+        medidas = [f for f in filas if f['visible'] != '']
+        dur = np.mean([float(p[-1]['t']) for p in episodios.values()])
+        vis = 100.0 * np.mean([f['visible'] == '1' for f in medidas])
+        banda = 100.0 * np.mean([f['en_banda_size'] == '1' for f in medidas])
+        posx = np.mean([abs(float(f['blob_posx'])) for f in medidas if f['visible'] == '1'] or [0])
+        lineas.append(f'| {m["et"]} | {m["cfg"]} | {len(episodios)} | '
+                      + ', '.join(f'{k} {v}' for k, v in sorted(desenlaces.items()))
+                      + f' | {dur:.1f} | {vis:.1f} | {banda:.1f} | {posx:.2f} |')
+    if len(lineas) == 2:
+        raise SystemExit(f'No hay registros real_*.csv en {RUTA_LOGS_P2}/.')
+    with open(os.path.join(dir_salida, 'tabla_real.md'), 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lineas) + '\n')
+    print('\n'.join(lineas))
+
+
 def main():
     a = argparse.ArgumentParser(description='Figuras y tablas de la Práctica 2.')
     a.add_argument('--evol', nargs='+', metavar='NOMBRE', help='evoluciones de p2_evol/')
@@ -484,13 +599,23 @@ def main():
                    help='configuración de NEAT del genoma (por defecto, la de su carpeta)')
     a.add_argument('--anexo-b', nargs='*', metavar='ETIQUETA',
                    help='tablas del anexo B (sin etiquetas: todas las de p2_logs/)')
+    a.add_argument('--comparar', action='store_true',
+                   help='tamaño y coste frente a la P1 (con --sb3, --monitor, --genoma, --evol)')
+    a.add_argument('--sb3', nargs=2, metavar=('ALG', 'MODELO.zip'), help='política de la P1')
+    a.add_argument('--monitor', nargs='+', help='CSV de Monitor de los entrenamientos de la P1')
+    a.add_argument('--genoma', help='genoma final de NEAT para --comparar')
+    a.add_argument('--real', action='store_true', help='tabla de p2_logs/real_*.csv')
     a.add_argument('--salida', default=RUTA_SALIDA)
     args = a.parse_args()
-    if not (args.evol or args.red or args.anexo_b is not None):
-        a.error('indica --evol, --red y/o --anexo-b')
+    if not (args.evol or args.red or args.anexo_b is not None or args.comparar or args.real):
+        a.error('indica --evol, --red, --anexo-b, --comparar y/o --real')
     os.makedirs(args.salida, exist_ok=True)
-    if args.evol:
+    if args.comparar:
+        modo_comparar(args, args.salida)
+    elif args.evol:
         modo_evol(args.evol, args.salida)
+    if args.real:
+        modo_real(args.salida)
     if args.red:
         modo_red(args.red, args.neat_ini, args.salida)
     if args.anexo_b is not None:

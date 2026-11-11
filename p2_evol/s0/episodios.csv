@@ -1,0 +1,9 @@
+generacion,genoma,episodio,guia,calidad,desenlace,segundos,pasos,sep_media,pct_banda,desv_media
+0,1,1,C3,1.814,colision,1.98,5,0.3486,20.0,7.17
+0,2,1,C3,4.876,perdido_sin_ver,3.98,10,0.4889,40.0,106.77
+0,3,1,C3,1.515,perdido_sin_ver,3.73,9,0.6327,0.0,91.92
+0,4,1,C3,11.134,perdido_distancia,9.01,23,0.558,34.8,47.4
+0,5,1,C3,2.713,perdido_distancia,3.33,8,0.6037,25.0,109.74
+0,6,1,C3,2.148,colision,2.03,5,0.3273,20.0,9.78
+0,7,1,C3,6.777,perdido_sin_ver,12.55,31,0.6101,0.0,19.69
+0,8,1,C3,4.96,perdido_sin_ver,4.13,10,0.5088,40.0,118.04

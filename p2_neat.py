@@ -313,6 +313,9 @@ def aviso_simulador(p2, args):
           f'multiplicador x{s.get("MULTIPLICADOR")}, físicas {s.get("FISICAS")}.  '
           f'Calidad {p2["CALIDAD"]}, episodios de {p2["DURACION_EVAL_S"]:.0f} s, '
           f'{p2["EPISODIOS_POR_INDIVIDUO"]} por individuo ({p2["AGREGACION"]}).')
+    # Tiempo para poner el guía en la configuración indicada antes del primer episodio.
+    if not args.sin_pausa:
+        input(f'Pon el guía en {args.guia} en RoboboSim y pulsa Enter para empezar... ')
 
 
 def estimar_coste(config_neat, p2, generaciones, t_reinicio=3.0):
@@ -521,6 +524,8 @@ def main():
     a.add_argument('--forzar', action='store_true', help='sobrescribir la carpeta')
     a.add_argument('--detalle', action='store_true',
                    help='una línea por paso con la verdad del terreno y el blob')
+    a.add_argument('--sin-pausa', action='store_true',
+                   help='empezar sin esperar a que se pulse Enter')
     a.add_argument('--nueva-config', action='store_true',
                    help='--reanudar con el p2_neat.ini de la carpeta, no el del punto de control')
     a.add_argument('--neat', default=RUTA_NEAT_INI)

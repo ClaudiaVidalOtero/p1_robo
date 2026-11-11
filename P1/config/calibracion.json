@@ -1,0 +1,488 @@
+[
+  {
+    "distancia": 0.2,
+    "lecturas": [
+      {
+        "etapa": "centro",
+        "size": 75.0,
+        "posx": 50.0
+      },
+      {
+        "etapa": "der1",
+        "size": 123.0,
+        "posx": 66.0
+      },
+      {
+        "etapa": "der2",
+        "size": 112.0,
+        "posx": 82.0
+      },
+      {
+        "etapa": "der3",
+        "size": 44.0,
+        "posx": 93.0
+      },
+      {
+        "etapa": "der4",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 84.0,
+        "posx": 48.0
+      },
+      {
+        "etapa": "izq1",
+        "size": 84.0,
+        "posx": 38.0
+      },
+      {
+        "etapa": "izq2",
+        "size": 78.0,
+        "posx": 26.0
+      },
+      {
+        "etapa": "izq3",
+        "size": 8.0,
+        "posx": 4.0
+      },
+      {
+        "etapa": "izq4",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 84.0,
+        "posx": 46.0
+      }
+    ],
+    "media_de_blobsize": 76.88888888888889,
+    "fecha": "2026-10-12 22:25:34"
+  },
+  {
+    "distancia": 0.25,
+    "lecturas": [
+      {
+        "etapa": "centro",
+        "size": 147.0,
+        "posx": 50.0
+      },
+      {
+        "etapa": "der1",
+        "size": 279.0,
+        "posx": 55.0
+      },
+      {
+        "etapa": "der2",
+        "size": 215.0,
+        "posx": 86.0
+      },
+      {
+        "etapa": "der3",
+        "size": 78.0,
+        "posx": 95.0
+      },
+      {
+        "etapa": "der4",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 243.0,
+        "posx": 53.0
+      },
+      {
+        "etapa": "izq1",
+        "size": 243.0,
+        "posx": 46.0
+      },
+      {
+        "etapa": "izq2",
+        "size": 206.0,
+        "posx": 33.0
+      },
+      {
+        "etapa": "izq3",
+        "size": 102.0,
+        "posx": 7.0
+      },
+      {
+        "etapa": "izq4",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 181.0,
+        "posx": 50.0
+      }
+    ],
+    "media_de_blobsize": 188.22222222222223,
+    "fecha": "2026-10-12 22:19:59"
+  },
+  {
+    "distancia": 0.3,
+    "lecturas": [
+      {
+        "etapa": "centro",
+        "size": 159.0,
+        "posx": 50.0
+      },
+      {
+        "etapa": "der1",
+        "size": 191.0,
+        "posx": 66.0
+      },
+      {
+        "etapa": "der2",
+        "size": 203.0,
+        "posx": 76.0
+      },
+      {
+        "etapa": "der3",
+        "size": 227.0,
+        "posx": 90.0
+      },
+      {
+        "etapa": "der4",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 182.0,
+        "posx": 51.0
+      },
+      {
+        "etapa": "izq1",
+        "size": 185.0,
+        "posx": 43.0
+      },
+      {
+        "etapa": "izq2",
+        "size": 194.0,
+        "posx": 31.0
+      },
+      {
+        "etapa": "izq3",
+        "size": 100.0,
+        "posx": 4.0
+      },
+      {
+        "etapa": "izq4",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 214.0,
+        "posx": 48.0
+      }
+    ],
+    "media_de_blobsize": 183.88888888888889,
+    "fecha": "2026-10-12 22:26:19"
+  },
+  {
+    "distancia": 0.4,
+    "lecturas": [
+      {
+        "etapa": "centro",
+        "size": 82.0,
+        "posx": 51.0
+      },
+      {
+        "etapa": "der1",
+        "size": 87.0,
+        "posx": 66.0
+      },
+      {
+        "etapa": "der2",
+        "size": 97.0,
+        "posx": 84.0
+      },
+      {
+        "etapa": "der3",
+        "size": 71.0,
+        "posx": 95.0
+      },
+      {
+        "etapa": "der4",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 81.0,
+        "posx": 51.0
+      },
+      {
+        "etapa": "izq1",
+        "size": 83.0,
+        "posx": 41.0
+      },
+      {
+        "etapa": "izq2",
+        "size": 88.0,
+        "posx": 28.0
+      },
+      {
+        "etapa": "izq3",
+        "size": 53.0,
+        "posx": 3.0
+      },
+      {
+        "etapa": "izq4",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 101.0,
+        "posx": 51.0
+      }
+    ],
+    "media_de_blobsize": 82.55555555555556,
+    "fecha": "2026-10-12 22:26:59"
+  },
+  {
+    "distancia": 0.5,
+    "lecturas": [
+      {
+        "etapa": "centro",
+        "size": 47.0,
+        "posx": 50.0
+      },
+      {
+        "etapa": "der1",
+        "size": 62.0,
+        "posx": 60.0
+      },
+      {
+        "etapa": "der2",
+        "size": 67.0,
+        "posx": 72.0
+      },
+      {
+        "etapa": "der3",
+        "size": 25.0,
+        "posx": 98.0
+      },
+      {
+        "etapa": "der4",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 62.0,
+        "posx": 47.0
+      },
+      {
+        "etapa": "izq1",
+        "size": 49.0,
+        "posx": 37.0
+      },
+      {
+        "etapa": "izq2",
+        "size": 53.0,
+        "posx": 25.0
+      },
+      {
+        "etapa": "izq3",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 47.0,
+        "posx": 45.0
+      }
+    ],
+    "media_de_blobsize": 51.5,
+    "fecha": "2026-10-12 22:14:29"
+  },
+  {
+    "distancia": 0.6,
+    "lecturas": [
+      {
+        "etapa": "centro",
+        "size": 35.0,
+        "posx": 51.0
+      },
+      {
+        "etapa": "der1",
+        "size": 36.0,
+        "posx": 66.0
+      },
+      {
+        "etapa": "der2",
+        "size": 40.0,
+        "posx": 84.0
+      },
+      {
+        "etapa": "der3",
+        "size": 19.0,
+        "posx": 98.0
+      },
+      {
+        "etapa": "der4",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 34.0,
+        "posx": 51.0
+      },
+      {
+        "etapa": "izq1",
+        "size": 35.0,
+        "posx": 39.0
+      },
+      {
+        "etapa": "izq2",
+        "size": 50.0,
+        "posx": 27.0
+      },
+      {
+        "etapa": "izq3",
+        "size": 41.0,
+        "posx": 15.0
+      },
+      {
+        "etapa": "izq4",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 34.0,
+        "posx": 48.0
+      }
+    ],
+    "media_de_blobsize": 36.0,
+    "fecha": "2026-10-12 22:27:52"
+  },
+  {
+    "distancia": 0.75,
+    "lecturas": [
+      {
+        "etapa": "centro",
+        "size": 23.0,
+        "posx": 50.0
+      },
+      {
+        "etapa": "der1",
+        "size": 15.0,
+        "posx": 65.0
+      },
+      {
+        "etapa": "der2",
+        "size": 16.0,
+        "posx": 75.0
+      },
+      {
+        "etapa": "der3",
+        "size": 27.0,
+        "posx": 87.0
+      },
+      {
+        "etapa": "der4",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 15.0,
+        "posx": 47.0
+      },
+      {
+        "etapa": "izq1",
+        "size": 23.0,
+        "posx": 36.0
+      },
+      {
+        "etapa": "izq2",
+        "size": 16.0,
+        "posx": 25.0
+      },
+      {
+        "etapa": "izq3",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 23.0,
+        "posx": 39.0
+      }
+    ],
+    "media_de_blobsize": 19.75,
+    "fecha": "2026-10-12 22:18:35"
+  },
+  {
+    "distancia": 1.0,
+    "lecturas": [
+      {
+        "etapa": "centro",
+        "size": 7.0,
+        "posx": 50.0
+      },
+      {
+        "etapa": "der1",
+        "size": 7.0,
+        "posx": 60.0
+      },
+      {
+        "etapa": "der2",
+        "size": 4.0,
+        "posx": 71.0
+      },
+      {
+        "etapa": "der3",
+        "size": 3.0,
+        "posx": 100.0
+      },
+      {
+        "etapa": "der4",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 15.0,
+        "posx": 50.0
+      },
+      {
+        "etapa": "izq1",
+        "size": 15.0,
+        "posx": 35.0
+      },
+      {
+        "etapa": "izq2",
+        "size": 16.0,
+        "posx": 22.0
+      },
+      {
+        "etapa": "izq3",
+        "size": 9.0,
+        "posx": 11.0
+      },
+      {
+        "etapa": "izq4",
+        "size": 0.0,
+        "posx": 0.0
+      },
+      {
+        "etapa": "centro",
+        "size": 15.0,
+        "posx": 50.0
+      }
+    ],
+    "media_de_blobsize": 10.11111111111111,
+    "fecha": "2026-10-12 22:16:00"
+  }
+]

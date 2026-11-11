@@ -15,19 +15,33 @@ evolución (y que en la P1 para la comparación).
 Escribe p2_logs/eval_<etiqueta>_<C>.csv con las columnas de la P1. Las
 paradas del guía de C4 se calculan después a partir de su pose registrada.
 
+ROBOT REAL (--real, apartado 6.6): sin simulador ni verdad del terreno. Antes
+de cada episodio una persona coloca el seguidor detrás del guía y pulsa
+Enter. El episodio acaba a los 120 s, con la pelota sin verse más de 3 s
+(criterio del anexo B que sí se mide a bordo) o con Ctrl-C, tras el cual se
+pregunta la causa (colisión, guía perdido u otra) vista por el operador. Se
+registra por paso el blob, la acción y el choque/pérdida que estima el
+entorno, en p2_logs/real_<etiqueta>_<C>.csv. Usar --config con la
+calibración del robot real.
+
 USO (puente lanzado con modules:="['blob']")
     python3 p2_evaluar.py --neat p2_evol/s0/mejor_genoma.pkl --etiqueta neat_s0
-    python3 p2_evaluar.py --sb3 sac --modelo modelos/p1_modelo_sac_s0.zip --configs C1 C2 C3
+    python3 p2_evaluar.py --sb3 sac --modelo P1/modelos/p1_modelo_sac_s0.zip --configs C1 C2 C3
     python3 p2_evaluar.py --reto
     python3 p2_evaluar.py --aleatorio
+    python3 p2_evaluar.py --real --neat p2_evol/s0/mejor_genoma.pkl --etiqueta neat_s0 \\
+        --configs C1 --episodios 3 --config config/p1_config_real.json
 """
 
 import argparse
 import csv
 import os
+import time
+
+import numpy as np
 
 from p1_evaluar import VerdadTerreno, episodio
-from p1_graficas_eval import COLUMNAS
+from p1_graficas_eval import COLUMNAS, PROTOCOLO
 from p1_robobo_env import RUTA_CONFIG, RoboboSeguidorEnv, cargar_config
 from p2_controladores import (
     RUTA_CONFIG_P2,
@@ -48,6 +62,13 @@ CONFIGURACIONES = {
 }
 EJECUCIONES = {'C1': 1, 'C2': 1, 'C3': 1, 'C4': 2}
 
+# Registro por paso en el robot real: sólo lo que se mide a bordo.
+COLUMNAS_REAL = ['config', 'episodio', 'paso', 't', 'visible', 'blob_posx',
+                 'blob_size', 'blob_y', 't_sin_ver', 'en_banda_size',
+                 'a0', 'a1', 'v', 'w', 'entorno_choque', 'entorno_perdido',
+                 'desenlace']
+CAUSAS_OPERADOR = {'c': 'colision', 'p': 'perdido_operador', 'o': 'otra'}
+
 
 def construir_controlador(args, env, c_env):
     """Devuelve (función obs -> acción, etiqueta)."""
@@ -66,6 +87,59 @@ def construir_controlador(args, env, c_env):
     return controlador_aleatorio(env), args.etiqueta or 'aleatorio'
 
 
+def episodio_real(env, politica, config, num, escritor, args):
+    """Un episodio en el robot real con los criterios del anexo B medibles a bordo."""
+    p = PROTOCOLO
+    obs, _ = env.reset()           # pide recolocar el seguidor y pulsar Enter
+    t0 = t_visto = time.time()
+    paso, desenlace, t = 0, None, 0.0
+    print(f'\n{config} episodio {num} (Ctrl-C si choca o se pierde a la vista del operador)')
+    try:
+        while desenlace is None:
+            accion = np.asarray(politica(obs), dtype=np.float32)
+            obs, _, term_env, _, info = env.step(accion)
+            ahora = time.time()
+            paso += 1
+            t = ahora - t0
+            visible = bool(info.get('visible'))
+            if visible:
+                t_visto = ahora
+            if ahora - t_visto > p['SIN_VER_S']:
+                desenlace = 'perdido_sin_ver'
+            elif t >= p['DURACION_S']:
+                desenlace = 'completado'
+            escritor.writerow({
+                'config': config, 'episodio': num, 'paso': paso, 't': f'{t:.3f}',
+                'visible': int(visible), 'blob_posx': f'{info.get("posx", 0.0):.4f}',
+                'blob_size': f'{info.get("size_raw", 0.0):.1f}',
+                'blob_y': f'{info.get("y_raw", 0.0):.1f}',
+                't_sin_ver': f'{ahora - t_visto:.2f}',
+                'en_banda_size': int(bool(info.get('en_banda'))),
+                'a0': f'{float(accion[0]):.4f}', 'a1': f'{float(accion[1]):.4f}',
+                'v': f'{info.get("v", 0.0):.4f}', 'w': f'{info.get("w", 0.0):.4f}',
+                'entorno_choque': int(bool(term_env and info.get('choque'))),
+                'entorno_perdido': int(bool(term_env and info.get('perdido'))),
+                'desenlace': desenlace or '',
+            })
+            if args.detalle:
+                print(f'  t {t:6.2f}  blob {"sí" if visible else "no"} '
+                      f'posx {info.get("posx", 0.0):+.2f} size {info.get("size_raw", 0.0):6.1f}  '
+                      f'v {info.get("v", 0.0):.2f} w {info.get("w", 0.0):+.2f}'
+                      + (f'  -> {desenlace}' if desenlace else ''))
+    except KeyboardInterrupt:
+        env._detener()
+        r = ''
+        while r not in CAUSAS_OPERADOR:
+            r = input('\nCausa (c = colisión, p = guía perdido, o = otra): ').strip().lower()
+        desenlace = CAUSAS_OPERADOR[r]
+        # La última fila registrada lleva el desenlace del operador.
+        escritor.writerow({'config': config, 'episodio': num, 'paso': paso + 1,
+                           't': f'{time.time() - t0:.3f}', 'desenlace': desenlace})
+    env._detener()
+    print(f'  {desenlace} a los {t:.1f} s ({paso} pasos)')
+    return desenlace
+
+
 def main():
     a = argparse.ArgumentParser(description='Evaluador del anexo B (C1-C4), Práctica 2.')
     ctrl = a.add_mutually_exclusive_group(required=True)
@@ -82,30 +156,43 @@ def main():
     a.add_argument('--config', default=RUTA_CONFIG, help='configuración del entorno (P1)')
     a.add_argument('--config-p2', default=RUTA_CONFIG_P2)
     a.add_argument('--detalle', action='store_true', help='una línea por paso')
+    a.add_argument('--real', action='store_true',
+                   help='robot real: sin simulador, reinicio manual (apartado 6.6)')
+    a.add_argument('--episodios', type=int, default=None,
+                   help='episodios por configuración (por defecto, los del anexo B)')
     args = a.parse_args()
 
     c_env = cargar_config(args.config)
-    env = RoboboSeguidorEnv(pasos_max=10**9, usar_simulador=True, ruta_config=args.config)
+    env = RoboboSeguidorEnv(pasos_max=10**9, usar_simulador=not args.real,
+                            ruta_config=args.config)
     verdad = None
     try:
         politica, etiqueta = construir_controlador(args, env, c_env)
         if env.observation_space.shape[0] != 3 and not args.aleatorio:
             print('Aviso: la observación no tiene 3 componentes; revisa OBS_Y / OBS_IR.')
-        verdad = VerdadTerreno(c_env['SIM_IP'])
         os.makedirs(RUTA_LOGS_P2, exist_ok=True)
-        sim = cargar_config_p2(args.config_p2).get('SIM', {})
-        print(f'Evaluando "{etiqueta}". Simulador: multiplicador x{sim.get("MULTIPLICADOR")}, '
-              f'físicas {sim.get("FISICAS")} (igual que en la evolución).')
+        if args.real:
+            print(f'Evaluando "{etiqueta}" en el ROBOT REAL con {args.config}.')
+        else:
+            verdad = VerdadTerreno(c_env['SIM_IP'])
+            sim = cargar_config_p2(args.config_p2).get('SIM', {})
+            print(f'Evaluando "{etiqueta}". Simulador: multiplicador x{sim.get("MULTIPLICADOR")}, '
+                  f'físicas {sim.get("FISICAS")} (igual que en la evolución).')
 
         for config in args.configs:
             input(f'\nPon el guía en {config}: {CONFIGURACIONES[config]}\n'
                   'y pulsa Enter... ')
-            ruta = os.path.join(RUTA_LOGS_P2, f'eval_{etiqueta}_{config}.csv')
+            prefijo = 'real' if args.real else 'eval'
+            ruta = os.path.join(RUTA_LOGS_P2, f'{prefijo}_{etiqueta}_{config}.csv')
+            n = args.episodios or EJECUCIONES[config]
             with open(ruta, 'w', newline='', encoding='utf-8') as f:
-                escritor = csv.DictWriter(f, fieldnames=COLUMNAS)
+                escritor = csv.DictWriter(f, fieldnames=COLUMNAS_REAL if args.real else COLUMNAS)
                 escritor.writeheader()
-                for num in range(1, EJECUCIONES[config] + 1):
-                    episodio(env, verdad, politica, config, num, escritor, args)
+                for num in range(1, n + 1):
+                    if args.real:
+                        episodio_real(env, politica, config, num, escritor, args)
+                    else:
+                        episodio(env, verdad, politica, config, num, escritor, args)
                     f.flush()
             print(f'registro por paso: {ruta}')
     finally:
