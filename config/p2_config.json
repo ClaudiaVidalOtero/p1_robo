@@ -17,7 +17,7 @@
       "P_PERDIDO": 0.0
     },
     "A": {
-      "_descripcion": "fuera de la banda como mucho K_FUERA; alineacion multiplicada por el termino de banda; sin penalizacion explicita; si el guia no arranca en T_ARRANQUE_MAX_S (el seguidor no se acerca) el episodio acaba y resta P_SIN_ARRANCAR",
+      "_descripcion": "fuera de la banda como mucho K_FUERA; alineacion multiplicada por el termino de banda; sin penalizacion explicita; si el guia no arranca en T_ARRANQUE_MAX_S (el seguidor no se acerca) el episodio acaba y resta P_SIN_ARRANCAR; con SOLO_TRAS_ARRANQUE (desde s2) solo puntuan los T s siguientes al arranque del guia",
       "W_BANDA": 1.0,
       "W_DESV": 0.5,
       "DESV_MAX_DEG": 45.0,
@@ -26,7 +26,8 @@
       "P_COLISION": 0.0,
       "P_PERDIDO": 0.0,
       "T_ARRANQUE_MAX_S": 10.0,
-      "P_SIN_ARRANCAR": 10.0
+      "P_SIN_ARRANCAR": 10.0,
+      "SOLO_TRAS_ARRANQUE": true
     },
     "B": {
       "_descripcion": "solo banda (fuera como mucho K_FUERA) + penalizacion explicita por fallo; mismo corte sin arranque que A",
@@ -38,7 +39,8 @@
       "P_COLISION": 20.0,
       "P_PERDIDO": 10.0,
       "T_ARRANQUE_MAX_S": 10.0,
-      "P_SIN_ARRANCAR": 10.0
+      "P_SIN_ARRANCAR": 10.0,
+      "SOLO_TRAS_ARRANQUE": true
     }
   },
   "RETO": {

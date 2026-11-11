@@ -1060,3 +1060,43 @@ Decisiones del equipo (2026-10-28):
             Las 7 referencias medidas con la posx reflejada se han movido de
             p2_evol/referencias.csv a p2_evol/referencias_posx_reflejada.csv
             (evidencia; las gráficas sólo leen la primera).
+
+
+-----------------------------------------------------------------
+[2026-11-11] 36. Calidad desde el arranque del guía y umbral de especies 2,0 (desde s2)
+-----------------------------------------------------------------
+  - Qué:    * p2_neat.episodio_calidad: con SOLO_TRAS_ARRANQUE (true en A y B
+              de config/p2_config.json) la ventana de T = 30 s que puntúa
+              empieza cuando el guía se ha movido más de 50 mm; la
+              aproximación no suma y 'completado' es llegar a T s después
+              del arranque (el episodio dura como mucho 10 + 30 s). Se
+              mantiene el corte 'sin_arrancar' a los 10 s.
+            * config/p2_neat.ini: compatibility_threshold 2,5 -> 2,0.
+  - Por qué: s1 (C3, A, 4 entradas, umbral 2,5) en la generación 5: el mejor,
+            genoma 102 (calidad 18,4; 13 y 19 s; separación media 0,55 m;
+            23-27 % en banda) tiene pesos size->v = -2,19 y sesgo -0,32: su
+            velocidad máxima posible es 0,042 m/s. Puntuaba mientras el guía
+            esperaba parado (rampa fuera de banda a ~0,55 m) y lo perdía en
+            cuanto arrancaba: variante lenta del "detenerse si eso evita el
+            fallo" (ap. 7) que el corte de 10 s no detecta, porque acercándose
+            despacio acaba haciendo arrancar al guía. Además, sin pelota
+            giraba siempre a la izquierda al máximo (w -0,5) sin usar
+            posx_ult (peso 0,50 frente a un sesgo de -1,15). Con 2,5 hubo 1
+            sola especie en 6 generaciones y la distancia genética media bajó
+            de 1,25 a 0,95: la población convergía a ese genoma.
+  - Efecto: prueba sin simulador (reloj simulado, pasos de 0,4 s):
+                                         antes      ahora
+              quieto, el guía no arranca  -4,0       -10,0  sin_arrancar
+              lento, arranca a los 8 s     9,3         2,2  perdido_distancia
+              sigue a 0,35 m desde 3 s    96,0       100,0  completado
+            s1 se detiene en la generación 6 y se conserva como evidencia
+            (calidad sin SOLO_TRAS_ARRANQUE). Las calidades de s0/s1 y de s2
+            no son comparables; la referencia del reto hay que medirla de
+            nuevo con esta calidad.
+
+  - Referencias: las medidas con la calidad anterior a SOLO_TRAS_ARRANQUE
+            (reto 25,2 y reto con búsqueda 27,3, ya con POSX_SIGNO = -1) se
+            han movido a p2_evol/referencias_sin_ventana_arranque.csv. Con la
+            calidad nueva el reto original saca 2,0 de media en 4 episodios
+            (0,23 / 0 / 0 / 7,81; 3 choques al arrancar: llega a 0,25 m/s y
+            frena tarde, por el retraso del blob y la pelota cortada de cerca).

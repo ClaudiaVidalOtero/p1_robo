@@ -2,12 +2,13 @@
 """
 Práctica 2 — Evolución con NEAT-Python del controlador del seguidor.
 
-Cada genoma es una red prealimentada (3 entradas, 2 salidas tanh) que
+Cada genoma es una red prealimentada (3 o 4 entradas, 2 salidas tanh) que
 controla al seguidor en el entorno de la P1 (RoboboSeguidorEnv) durante
 EPISODIOS_POR_INDIVIDUO episodios de DURACION_EVAL_S segundos reales. La
 calidad usa información privilegiada del simulador (VerdadTerreno de
 p1_evaluar.py): la separación y la desviación reales respecto a la pelota.
-La red nunca la recibe; su observación sigue siendo [posx, size, posy].
+La red nunca la recibe; su observación sigue siendo [posx, size, posy]
+(+ posx_ult con ENTORNO.OBS_MEMORIA, desde s1).
 
 CALIDAD (config/p2_config.json, formulación A, B o A0)
     En cada paso, con Δt el tiempo real del paso:
@@ -23,6 +24,11 @@ CALIDAD (config/p2_config.json, formulación A, B o A0)
     no se ha movido más de MOV_ARRANQUE_MM en T_ARRANQUE_MAX_S, el episodio
     acaba ('sin_arrancar') y se resta P_SIN_ARRANCAR: quedarse quieto a
     0,64 m completaba los 30 s con calidad 17 (genomas 34, 56, 86 de s0).
+    SOLO_TRAS_ARRANQUE (desde s2): los T s que puntúan empiezan cuando el
+    guía arranca; la aproximación no suma y el episodio dura hasta T s
+    después del arranque (como mucho T_ARRANQUE_MAX_S + T). Acercarse
+    despacio mientras el guía espera puntuaba 18 (genoma 102 de s1, que no
+    pasaba de 0,04 m/s).
     Rango [-P, 100]. Con K_FUERA = 0,3 y la alineación ligada a la banda,
     seguir de lejos sin entrar en ella puntúa poco (en A0, seguir a 0,57 m
     puntuaba 73). El episodio acaba con los criterios del anexo B
@@ -137,6 +143,11 @@ def episodio_calidad(env, verdad, politica, cal, duracion):
     # T_ARRANQUE_MAX_S, el episodio acaba (quedarse quieto no es completar).
     t_arranque_max = cal.get('T_ARRANQUE_MAX_S')
     guia0, arrancado = None, False
+    # SOLO_TRAS_ARRANQUE: la ventana de T segundos que puntúa empieza cuando el
+    # guía arranca; la aproximación no suma (genoma 102 de s1: sin pasar de
+    # 0,04 m/s puntuaba 18 mientras el guía esperaba). Si no, empieza en t0.
+    solo_tras = cal.get('SOLO_TRAS_ARRANQUE', False)
+    t_ini = None if solo_tras else t0
 
     while desenlace is None:
         obs, _, _, _, info = env.step(politica(obs))
@@ -146,8 +157,14 @@ def episodio_calidad(env, verdad, politica, cal, duracion):
         arrancado = arrancado or math.hypot(guia[0] - guia0[0],
                                             guia[1] - guia0[1]) > MOV_ARRANQUE_MM
         ahora = time.time()
-        # El último paso no puede sumar más allá de T: calidad <= 100.
-        dt = min(ahora, t0 + duracion) - min(t_prev, t0 + duracion)
+        if t_ini is None and arrancado:
+            t_ini = ahora
+        # Sólo suma el tiempo dentro de [t_ini, t_ini + T]: calidad <= 100.
+        if t_ini is None:
+            dt = 0.0
+        else:
+            fin = t_ini + duracion
+            dt = min(ahora, fin) - min(max(t_prev, t_ini), fin)
         t_prev = ahora
         pasos += 1
 
@@ -162,7 +179,7 @@ def episodio_calidad(env, verdad, politica, cal, duracion):
             desenlace = 'perdido_sin_ver'
         elif t_arranque_max and not arrancado and ahora - t0 >= t_arranque_max:
             desenlace = 'sin_arrancar'
-        elif ahora - t0 >= duracion:
+        elif t_ini is not None and ahora - t_ini >= duracion:
             desenlace = 'completado'
 
         acum += puntos_paso(sep, desv, cal) * dt
