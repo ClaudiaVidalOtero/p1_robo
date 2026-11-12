@@ -2,7 +2,8 @@
   "_descripcion": "Configuracion de la evolucion de la Practica 2 (p2_neat.py). Las constantes del sensor y de la accion siguen en p1_config.json. Las calidades usan informacion privilegiada del simulador (separacion y desviacion reales a la pelota).",
   "DURACION_EVAL_S": 30.0,
   "_EPISODIOS_POR_INDIVIDUO": "2 desde s1: con 1 la calidad de un mismo genoma variaba de 31,9 a 2,8 y el mejor de cada generacion era el de mas suerte (s0)",
-  "EPISODIOS_POR_INDIVIDUO": 2,
+  "_EPISODIOS_POR_INDIVIDUO_S4": "3 desde s4 (s3, de la companera, se lanzo con 2): en s2 (2 episodios) el mismo genoma sacaba 38,1 y 1,3 (379, gen 21) y la evolucion se estanco en las gen 20-25 (CAMBIOS 38)",
+  "EPISODIOS_POR_INDIVIDUO": 3,
   "AGREGACION": "media",
   "CALIDAD": "A",
   "CALIDADES": {

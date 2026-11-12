@@ -1,0 +1,6 @@
+generacion,genoma,episodio,guia,calidad,desenlace,segundos,pasos,sep_media,pct_banda,desv_media
+0,1,1,C3,3.245,perdido_sin_ver,4.44,11,0.4709,45.5,91.28
+0,1,2,C3,4.902,perdido_sin_ver,4.62,11,0.39,54.5,96.91
+0,1,3,C3,3.496,perdido_sin_ver,4.65,11,0.429,36.4,85.5
+0,2,1,C3,0.889,perdido_sin_ver,3.97,10,0.4892,40.0,44.67
+0,2,2,C3,1.995,perdido_distancia,9.17,23,0.6126,13.0,30.46

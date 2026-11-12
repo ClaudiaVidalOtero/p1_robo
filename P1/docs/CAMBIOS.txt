@@ -1100,3 +1100,54 @@ Decisiones del equipo (2026-10-28):
             calidad nueva el reto original saca 2,0 de media en 4 episodios
             (0,23 / 0 / 0 / 7,81; 3 choques al arrancar: llega a 0,25 m/s y
             frena tarde, por el retraso del blob y la pelota cortada de cerca).
+
+
+-----------------------------------------------------------------
+[2026-11-12] 37. s2 reanudada desde la generación 20 (15 generaciones más)
+-----------------------------------------------------------------
+  - Qué:    python3 p2_neat.py --reanudar --nombre s2 --generaciones 15
+            --guia C3 --sin-pausa, desde p2_evol/s2/chk/p2-20. Misma
+            configuración que s2 (sin --nueva-config): población 20, 2
+            episodios por individuo, calidad A con SOLO_TRAS_ARRANQUE, C3,
+            físicas simplificadas, multiplicador x1. Salida de consola en
+            p2_evol/s2/reanudar_gen20.log.
+  - Por qué: s2 terminó las 20 generaciones (11/11 23:48 -> 12/11 02:08,
+            ~2,3 h, 800 episodios) todavía en ascenso: mejor 5,8 -> 21,0 y
+            media 0,6 -> ~5; duración media de los episodios 4,0 -> 7,2 s;
+            pero ningún episodio completado (máximo 19,8 s). Desenlaces:
+            58 % perdido_sin_ver, 24 % perdido_distancia, 14 % colisión.
+            Siempre 1 especie; redes de 2-3 nodos. No se cambia la
+            configuración a mitad de evolución para que la curva siga siendo
+            de una sola configuración (ap. 6.1 y 9.1 del enunciado).
+  - Efecto: parada a mano (Ctrl+C) durante la generación 26; último punto
+            de control p2-26. Generaciones 20-25: mejor 13,2 / 19,7 / 10,6 /
+            12,5 / 14,2 / 14,5 y media 1,2-4,8 (en la 17 era 5,9): estancada.
+            Primer episodio completado (genoma 379, gen 21, calidad 38,1,
+            separación media 0,55 m, 36 % en banda), pero el mismo genoma sacó
+            1,3, 1,3 y 3,8 en sus otros episodios: suerte, no aprendizaje.
+            ~60 % de los episodios siguen acabando en perdido_sin_ver. Las
+            filas de la generación 26 en episodios.csv están incompletas.
+
+
+-----------------------------------------------------------------
+[2026-11-12] 38. Población 30, 3 episodios por individuo y umbral de especies 1,5 (desde s4)
+-----------------------------------------------------------------
+  - Qué:    config/p2_neat.ini: pop_size 20 -> 30; compatibility_threshold
+            2,0 -> 1,5. config/p2_config.json: EPISODIOS_POR_INDIVIDUO 2 -> 3
+            (AGREGACION sigue en media). Calidad A sin cambios.
+            s3 (la compañera, semilla 1) se lanzó con la configuración de s2
+            (población 20, 2 episodios, umbral 2,0): no es la misma
+            configuración que s4.
+  - Por qué: * Ruido: en s2 el genoma 379 sacó 38,1 y 1,3 en la misma
+              generación; con la media de 2 episodios se elige al afortunado
+              (ap. 7 del enunciado, "la calidad es ruidosa").
+            * Especiación: s2 tuvo 1 sola especie en las 26 generaciones.
+              Distancias genéticas reales de sus puntos de control (media /
+              p75 / p90): g1 1,31/1,58/1,81; g10 1,06/1,23/1,41; g20
+              1,30/1,50/1,89; g26 1,01/1,20/1,37. Con 2,0 casi ningún par se
+              separa; con 1,5 se separa ~el 25 % superior. Población 30 para
+              que quepan varias especies con min_species_size 2 (hasta 15).
+            * Coste: ~30 x 3 x (8 s + 3 s de reinicio) = ~16 min por
+              generación con la duración actual de los episodios; cota de
+              p2_neat.py: 30 x 3 x 33 s = 50 min en el peor caso.
+  - Efecto: PENDIENTE (s4: número de especies, curvas y desenlaces).
