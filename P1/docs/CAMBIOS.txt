@@ -1151,3 +1151,39 @@ Decisiones del equipo (2026-10-28):
               generación con la duración actual de los episodios; cota de
               p2_neat.py: 30 x 3 x 33 s = 50 min en el peor caso.
   - Efecto: PENDIENTE (s4: número de especies, curvas y desenlaces).
+
+
+-----------------------------------------------------------------
+[2026-11-12] 39. Calidad C: la alineación pasa a ser el término principal (desde s4)
+-----------------------------------------------------------------
+  - Qué:    config/p2_config.json: formulación C (W_BANDA 0,25, W_DESV 1,0,
+            DESV_MAX_DEG 60; K_FUERA, ALIN_POR_BANDA, corte sin arranque y
+            SOLO_TRAS_ARRANQUE como en A) y CALIDAD "A" -> "C".
+            p2_neat.py: --calidad admite C. La fórmula no cambia (sólo
+            coeficientes). s4 se había lanzado con A y se para antes de
+            terminar su primera generación; se relanza con --forzar.
+  - Por qué: * La tarea es posible con estos sensores y límites: SAC de la P1
+              completó C3 (120 s) en las 3 semillas, con desviación media
+              3-4°, pelota visible el 100 % y giro proporcional a posx
+              (P1/p1_logs/eval_sac_s*_C3.csv). El entorno sólo ha cambiado en
+              POSX_SIGNO y posx_ult; el simulador, igual (x1, simplificadas).
+            * Los mejores de s2 (calidad A) no usan posx para girar
+              (entradas -1 posx, -2 size, -3 posy, -4 posx_ult; salida 1 =
+              giro): 329: posy->giro 3,63, sin posx; 379: posy->giro 3,92,
+              size->giro -1,44, sin posx; 462: posy->giro 2,72, posx sólo
+              al avance. Como posy sólo es distinto de 0 con la pelota a la
+              vista, giran casi a tope a la izquierda al verla (a1 ~ +0,97)
+              y a la derecha al perderla (sesgo, a1 ~ -0,87): un zigzag en
+              el borde del campo de la cámara (~±35°). Desviación media de
+              los episodios de s2: 72° en g0-4, ~54-60° después; los mejores
+              ~40°. Atajo del ap. 7 del enunciado.
+            * Con A ese zigzag apenas pierde: en la banda, 0,70 por segundo
+              con 40° frente a 0,98 con 3° (peso de la alineación 0,5/1,5).
+              Con C: 0,47 frente a 0,96 (70°: 0,20, antes 0,67). Fuera de la
+              banda (0,6 m) se sigue puntuando poco: 0,19 / 0,09.
+              DESV_MAX 60 (no 45) para que la población inicial, a 60-70°,
+              no puntúe toda 0 y la selección distinga desde la generación 0.
+            * Además da la segunda formulación comparada que valora el ap. 5.
+  - Efecto: comprobado sin simulador con puntos_paso (valores de arriba) y
+            --help. PENDIENTE: s4 con C (desviación media de los episodios,
+            uso de posx en los pesos de los mejores, completados).

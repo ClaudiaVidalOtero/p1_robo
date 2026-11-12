@@ -10,7 +10,7 @@ p1_evaluar.py): la separación y la desviación reales respecto a la pelota.
 La red nunca la recibe; su observación sigue siendo [posx, size, posy]
 (+ posx_ult con ENTORNO.OBS_MEMORIA, desde s1).
 
-CALIDAD (config/p2_config.json, formulación A, B o A0)
+CALIDAD (config/p2_config.json, formulación A, B, C o A0; C desde s4)
     En cada paso, con Δt el tiempo real del paso:
       banda(sep)  1 dentro de [0,20, 0,45] m; fuera, K_FUERA · rampa lineal
                   que vale 1 en el borde de la banda y 0 en la colisión
@@ -558,7 +558,7 @@ def main():
     a.add_argument('--generaciones', type=int, default=15)
     a.add_argument('--guia', choices=GUIAS, required=True,
                    help='configuración del guía puesta en RoboboSim (sólo se anota)')
-    a.add_argument('--calidad', choices=['A', 'B', 'A0'], default=None,
+    a.add_argument('--calidad', choices=['A', 'B', 'C', 'A0'], default=None,
                    help='formulación de la calidad (por defecto, la de p2_config.json)')
     a.add_argument('--duracion', type=float, default=None,
                    help='segundos por episodio de evaluación (por defecto, DURACION_EVAL_S)')

@@ -5,7 +5,8 @@
   "_EPISODIOS_POR_INDIVIDUO_S4": "3 desde s4 (s3, de la companera, se lanzo con 2): en s2 (2 episodios) el mismo genoma sacaba 38,1 y 1,3 (379, gen 21) y la evolucion se estanco en las gen 20-25 (CAMBIOS 38)",
   "EPISODIOS_POR_INDIVIDUO": 3,
   "AGREGACION": "media",
-  "CALIDAD": "A",
+  "_CALIDAD": "C desde s4 (CAMBIOS 39); s0-s3 usaron A",
+  "CALIDAD": "C",
   "CALIDADES": {
     "A0": {
       "_descripcion": "DESCARTADA (CAMBIOS 30): rampa completa fuera de la banda + alineacion sumada; seguir a 0,57 m sin entrar en la banda puntuaba 73",
@@ -39,6 +40,19 @@
       "ALIN_POR_BANDA": true,
       "P_COLISION": 20.0,
       "P_PERDIDO": 10.0,
+      "T_ARRANQUE_MAX_S": 10.0,
+      "P_SIN_ARRANCAR": 10.0,
+      "SOLO_TRAS_ARRANQUE": true
+    },
+    "C": {
+      "_descripcion": "como A pero con la alineacion como termino principal (CAMBIOS 39): los mejores de s2 (A) giraban a tope segun se viera o no la pelota, sin usar posx, con desviacion media ~40 grados (SAC de la P1: 3-4). En la banda, A puntuaba 0,70 con 40 grados y 0,98 con 3; C puntua 0,47 y 0,95. DESV_MAX 60 para que la poblacion inicial (60-70 grados) no puntue toda 0",
+      "W_BANDA": 0.25,
+      "W_DESV": 1.0,
+      "DESV_MAX_DEG": 60.0,
+      "K_FUERA": 0.3,
+      "ALIN_POR_BANDA": true,
+      "P_COLISION": 0.0,
+      "P_PERDIDO": 0.0,
       "T_ARRANQUE_MAX_S": 10.0,
       "P_SIN_ARRANCAR": 10.0,
       "SOLO_TRAS_ARRANQUE": true
