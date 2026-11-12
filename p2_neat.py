@@ -10,13 +10,15 @@ p1_evaluar.py): la separación y la desviación reales respecto a la pelota.
 La red nunca la recibe; su observación sigue siendo [posx, size, posy]
 (+ posx_ult con ENTORNO.OBS_MEMORIA, desde s1).
 
-CALIDAD (config/p2_config.json, formulación A, B o C; C desde s4)
+CALIDAD (config/p2_config.json, formulación A, B, C, D o E; C desde s4)
     En cada paso, con Δt el tiempo real del paso:
       banda(sep)  1 dentro de [0,20, 0,45] m; fuera, K_FUERA · rampa lineal
                   que vale 1 en el borde de la banda y 0 en la colisión
                   (0,12 m) y en guía perdido (0,90 m)
       alin(desv)  max(0, 1 - |desv| / DESV_MAX_DEG)
-      paso        banda·(W_BANDA + W_DESV·alin)
+      suave       (E) W_SUAVE · |a1 - a1_anterior| / 2 si la pelota se ve en
+                  este paso y en el anterior; si no, 0 (a1: giro en [-1, 1])
+      paso        banda·(W_BANDA + W_DESV·alin) - suave
     calidad = 100 · Σ paso·Δt / (T · (W_BANDA + W_DESV))
               - P_COLISION si choca - P_PERDIDO si pierde al guía
     Sin arranque: el guía espera parado hasta que el seguidor se acerca. Si
@@ -138,6 +140,8 @@ def episodio_calidad(env, verdad, politica, cal, duracion):
     t0 = t_prev = t_visto = time.time()
     acum, pasos, desenlace = 0.0, 0, None
     seps, desvs, en_banda = [], [], 0
+    # E: giro a1 del paso anterior con la pelota a la vista (None si no se veía).
+    a1_prev = None
     # El guía espera parado hasta que el seguidor se acerca: si no arranca en
     # T_ARRANQUE_MAX_S, el episodio acaba (quedarse quieto no es completar).
     t_arranque_max = cal.get('T_ARRANQUE_MAX_S')
@@ -149,7 +153,8 @@ def episodio_calidad(env, verdad, politica, cal, duracion):
     t_ini = None if solo_tras else t0
 
     while desenlace is None:
-        obs, _, _, _, info = env.step(politica(obs))
+        accion = politica(obs)
+        obs, _, _, _, info = env.step(accion)
         seguidor, guia, pelota = verdad.leer()
         if guia0 is None:
             guia0 = guia
@@ -181,7 +186,18 @@ def episodio_calidad(env, verdad, politica, cal, duracion):
         elif t_ini is not None and ahora - t_ini >= duracion:
             desenlace = 'completado'
 
-        acum += puntos_paso(sep, desv, cal) * dt
+        # E: castiga cambiar de golpe el giro con la pelota a la vista (en el
+        # anexo B de s6 el giro pasaba de -0,9 a +0,9 y la pelota salía de la
+        # cámara en recta). Sin pelota no se castiga: buscarla es libre.
+        a1 = float(accion[1])
+        suave = 0.0
+        if info.get('visible'):
+            if a1_prev is not None:
+                suave = cal.get('W_SUAVE', 0.0) * abs(a1 - a1_prev) / 2.0
+            a1_prev = a1
+        else:
+            a1_prev = None
+        acum += (puntos_paso(sep, desv, cal) - suave) * dt
         if CTX.get('detalle'):
             print(f'    t {ahora - t0:5.2f}  sep {sep:.3f} m  desv {desv:+6.1f}°  '
                   f'seg ({seguidor[0]:7.1f}, {seguidor[1]:7.1f})  '
@@ -587,7 +603,7 @@ def main():
     a.add_argument('--generaciones', type=int, default=15)
     a.add_argument('--guia', choices=GUIAS, required=True,
                    help='configuración del guía puesta en RoboboSim (sólo se anota)')
-    a.add_argument('--calidad', choices=['A', 'B', 'C', 'D'], default=None,
+    a.add_argument('--calidad', choices=['A', 'B', 'C', 'D', 'E'], default=None,
                    help='formulación de la calidad (por defecto, la de p2_config.json)')
     a.add_argument('--duracion', type=float, default=None,
                    help='segundos por episodio de evaluación (por defecto, DURACION_EVAL_S)')

@@ -1287,3 +1287,26 @@ Decisiones del equipo (2026-10-28):
             completado de 1.800. C no castiga el fallo: chocar o perder
             al guía sólo deja de sumar.
   - Efecto: PENDIENTE (s7).
+
+
+-----------------------------------------------------------------
+[2026-11-12] 46. Calidad E: penalización por cambios bruscos de giro
+-----------------------------------------------------------------
+  (El 45, W_MAX 0,3 para s8, está en la rama s8-wmax.)
+  - Qué:    p2_neat.py, episodio_calidad: en cada paso con la pelota a la
+            vista, y también vista en el paso anterior, se resta
+            W_SUAVE·|a1 - a1_anterior|/2 a los puntos del paso (a1: salida
+            de giro de la red, en [-1, 1]). Sin pelota no se castiga:
+            buscarla girando es libre. --calidad admite E.
+            config/p2_config.json: calidad E = C (W_BANDA 0,25, W_DESV 1,0,
+            DESV_MAX 60°, K_FUERA 0,3, sin P_COLISION ni P_PERDIDO) con
+            W_SUAVE 0,5. Las demás calidades no cambian (sin W_SUAVE = 0).
+  - Por qué: anexo B de s6 (genoma 99): 0/5, todos perdido_sin_ver en recta
+            con la separación en banda. El giro estaba saturado (|a1| > 0,8)
+            en el 43-67 % de los pasos con la pelota a la vista y pasaba de
+            -0,9 a +0,9 de un paso al siguiente, sacando la pelota de la
+            cámara. Con W_SUAVE 0,5, ir de -0,9 a +0,9 en cada paso resta
+            0,45 de los 1,25 puntos máximos por paso; un giro suave apenas
+            resta. Depende sólo de la acción, que el robot conoce (magnitud
+            observable, como recomienda el enunciado).
+  - Efecto: PENDIENTE (s10, con --duracion 30).
