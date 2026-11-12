@@ -1272,3 +1272,18 @@ Decisiones del equipo (2026-10-28):
   - Por qué: p2_evol/s4 (de la compañera) se paró en la generación 0 tras 2
             episodios: tiene evolucion.csv sólo con la cabecera y ni chk/ ni
             genomas/.
+
+
+-----------------------------------------------------------------
+[2026-11-12] 44. Calidad D (C con penalización por fallo) para s7
+-----------------------------------------------------------------
+  - Qué:    config/p2_config.json: nueva calidad D = C (W_BANDA 0,25,
+            W_DESV 1,0, DESV_MAX 60°, K_FUERA 0,3) con P_COLISION 20 y
+            P_PERDIDO 20. p2_neat.py: --calidad admite D.
+            DURACION_EVAL_S pasa de 30 a 60 s (s4-s6 usaron 30).
+  - Por qué: s4 (C) se estancó desde la generación 11: desviación ~60°,
+            colisiones de 3 a 13-16 por generación y la mitad de los
+            episodios terminados por perder la pelota; sólo 1 episodio
+            completado de 1.800. C no castiga el fallo: chocar o perder
+            al guía sólo deja de sumar.
+  - Efecto: PENDIENTE (s7).

@@ -587,7 +587,7 @@ def main():
     a.add_argument('--generaciones', type=int, default=15)
     a.add_argument('--guia', choices=GUIAS, required=True,
                    help='configuración del guía puesta en RoboboSim (sólo se anota)')
-    a.add_argument('--calidad', choices=['A', 'B', 'C'], default=None,
+    a.add_argument('--calidad', choices=['A', 'B', 'C', 'D'], default=None,
                    help='formulación de la calidad (por defecto, la de p2_config.json)')
     a.add_argument('--duracion', type=float, default=None,
                    help='segundos por episodio de evaluación (por defecto, DURACION_EVAL_S)')

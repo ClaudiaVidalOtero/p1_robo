@@ -1,6 +1,6 @@
 {
   "_descripcion": "Configuracion de la evolucion de la Practica 2 (p2_neat.py). Las constantes del sensor y de la accion siguen en p1_config.json. Las calidades usan informacion privilegiada del simulador (separacion y desviacion reales a la pelota).",
-  "DURACION_EVAL_S": 30.0,
+  "DURACION_EVAL_S": 60.0,
   "_EPISODIOS_POR_INDIVIDUO": "2 desde s1: con 1 la calidad de un mismo genoma variaba de 31,9 a 2,8 y el mejor de cada generacion era el de mas suerte (s0)",
   "_EPISODIOS_POR_INDIVIDUO_S4": "3 desde s4 (s3, de la companera, se lanzo con 2): en s2 (2 episodios) el mismo genoma sacaba 38,1 y 1,3 (379, gen 21) y la evolucion se estanco en las gen 20-25 (CAMBIOS 38)",
   "EPISODIOS_POR_INDIVIDUO": 3,
@@ -40,6 +40,18 @@
       "K_FUERA": 0.3,
       "P_COLISION": 0.0,
       "P_PERDIDO": 0.0,
+      "T_ARRANQUE_MAX_S": 10.0,
+      "P_SIN_ARRANCAR": 10.0,
+      "SOLO_TRAS_ARRANQUE": true
+    },
+    "D": {
+      "_descripcion": "como C (misma banda y alineacion) mas penalizacion explicita por fallo: resta P_COLISION si choca y P_PERDIDO si pierde al guia (CAMBIOS 44). En s4 (C, sin penalizacion) las colisiones subieron de 3 a 13-16 por generacion y la mitad de los episodios acababan perdiendo la pelota",
+      "W_BANDA": 0.25,
+      "W_DESV": 1.0,
+      "DESV_MAX_DEG": 60.0,
+      "K_FUERA": 0.3,
+      "P_COLISION": 20.0,
+      "P_PERDIDO": 20.0,
       "T_ARRANQUE_MAX_S": 10.0,
       "P_SIN_ARRANCAR": 10.0,
       "SOLO_TRAS_ARRANQUE": true
