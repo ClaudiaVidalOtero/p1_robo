@@ -1310,3 +1310,20 @@ Decisiones del equipo (2026-10-28):
             resta. Depende sólo de la acción, que el robot conoce (magnitud
             observable, como recomienda el enunciado).
   - Efecto: PENDIENTE (s10, con --duracion 30).
+
+
+-----------------------------------------------------------------
+[2026-11-12] 47. s10: calidad E sobre la configuración de s8 (W_MAX 0,3)
+-----------------------------------------------------------------
+  (Rama s10-e-con-s8 = calidad-e + el W_MAX 0,3 de s8, CAMBIOS 45.)
+  - Qué:    config/p2_config.json, bloque ENTORNO: W_MAX = 0,3 rad/s, con
+            las mismas líneas que en la rama s8-wmax. s10 = s8 (calidad C,
+            W_MAX 0,3, 30 s, 3 episodios, pop 30, semilla 1) cambiando
+            sólo la calidad C por la E. Se lanza con --calidad E
+            --duracion 30 (en esta rama los valores por defecto son los de
+            main: calidad D y 60 s).
+  - Por qué: se usa sólo si s8 mejora a s6 en la reevaluación o en el
+            anexo B. Entonces s10 frente a s8 mide lo que aporta castigar
+            los giros bruscos por encima de limitar el giro máximo; la
+            comparación con s6 deja de ser de un solo cambio.
+  - Efecto: PENDIENTE (s10).

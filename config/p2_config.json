@@ -82,7 +82,9 @@
   },
   "ENTORNO": {
     "_descripcion": "claves que se sobrescriben en p1_config.json solo para la P2 (sin tocar la calibracion). OBS_MEMORIA anade a la observacion el ultimo posx visto (preprocesado del propio sensor, existe en el robot real): sin el, al perder la pelota en un giro la observacion es [0,0,0] y la red no sabe hacia donde girar (reto en C3, 11/11). Con OBS_MEMORIA, num_inputs = 4 en p2_neat.ini",
-    "OBS_MEMORIA": true
+    "OBS_MEMORIA": true,
+    "_W_MAX": "0,3 desde s8 (P1 y s0-s7: 0,5; CAMBIOS 45): en el anexo B de s6 (genoma 99) el giro estaba saturado (|a1| > 0,8) en el 43-67 % de los pasos con la pelota a la vista y un golpe de giro la sacaba de la camara en recta, con la separacion en banda (0/5, todos perdido_sin_ver)",
+    "W_MAX": 0.3
   },
   "SIM": {
     "_descripcion": "declarar en la memoria; debe coincidir en evolucion, evaluacion y comparacion con la P1",
