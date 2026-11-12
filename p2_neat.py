@@ -10,14 +10,13 @@ p1_evaluar.py): la separación y la desviación reales respecto a la pelota.
 La red nunca la recibe; su observación sigue siendo [posx, size, posy]
 (+ posx_ult con ENTORNO.OBS_MEMORIA, desde s1).
 
-CALIDAD (config/p2_config.json, formulación A, B, C o A0; C desde s4)
+CALIDAD (config/p2_config.json, formulación A, B o C; C desde s4)
     En cada paso, con Δt el tiempo real del paso:
       banda(sep)  1 dentro de [0,20, 0,45] m; fuera, K_FUERA · rampa lineal
                   que vale 1 en el borde de la banda y 0 en la colisión
                   (0,12 m) y en guía perdido (0,90 m)
       alin(desv)  max(0, 1 - |desv| / DESV_MAX_DEG)
-      paso        banda·(W_BANDA + W_DESV·alin)     si ALIN_POR_BANDA
-                  W_BANDA·banda + W_DESV·alin       si no (A0, descartada)
+      paso        banda·(W_BANDA + W_DESV·alin)
     calidad = 100 · Σ paso·Δt / (T · (W_BANDA + W_DESV))
               - P_COLISION si choca - P_PERDIDO si pierde al guía
     Sin arranque: el guía espera parado hasta que el seguidor se acerca. Si
@@ -30,8 +29,8 @@ CALIDAD (config/p2_config.json, formulación A, B, C o A0; C desde s4)
     despacio mientras el guía espera puntuaba 18 (genoma 102 de s1, que no
     pasaba de 0,04 m/s).
     Rango [-P, 100]. Con K_FUERA = 0,3 y la alineación ligada a la banda,
-    seguir de lejos sin entrar en ella puntúa poco (en A0, seguir a 0,57 m
-    puntuaba 73). El episodio acaba con los criterios del anexo B
+    seguir de lejos sin entrar en ella puntúa poco (con la alineación sumada
+    y K_FUERA = 1, la A0 descartada, seguir a 0,57 m puntuaba 73). El episodio acaba con los criterios del anexo B
     (colisión, guía perdido por distancia o > 3 s sin ver) o a los T s: los
     segundos no vividos no suman (penalización implícita), y la suma por
     tiempo distingue al que falla a los 2 s del que falla a los 8 s.
@@ -60,10 +59,12 @@ USO (puente lanzado con modules:="['blob']"; desde la raíz del proyecto)
 import argparse
 import csv
 import glob
+import gzip
 import json
 import math
 import os
 import pickle
+import random
 import re
 import shutil
 import statistics
@@ -106,7 +107,7 @@ CAMPOS_EPISODIO = ['generacion', 'genoma', 'episodio', 'guia', 'calidad',
 # Calidad
 # =====================================================================
 
-def puntos_banda(sep, k_fuera=1.0):
+def puntos_banda(sep, k_fuera):
     """1 dentro de la banda; fuera, k_fuera · rampa lineal hasta 0 en los umbrales de fallo."""
     p = PROTOCOLO
     if p['BANDA_MIN_M'] <= sep <= p['BANDA_MAX_M']:
@@ -124,11 +125,9 @@ def puntos_alineacion(desv, desv_max):
 
 def puntos_paso(sep, desv, cal):
     """Puntos de un paso (sin Δt), en [0, W_BANDA + W_DESV]."""
-    banda = puntos_banda(sep, cal.get('K_FUERA', 1.0))
+    banda = puntos_banda(sep, cal['K_FUERA'])
     alin = puntos_alineacion(desv, cal['DESV_MAX_DEG'])
-    if cal.get('ALIN_POR_BANDA', False):
-        return banda * (cal['W_BANDA'] + cal['W_DESV'] * alin)
-    return cal['W_BANDA'] * banda + cal['W_DESV'] * alin
+    return banda * (cal['W_BANDA'] + cal['W_DESV'] * alin)
 
 
 def episodio_calidad(env, verdad, politica, cal, duracion):
@@ -313,6 +312,19 @@ class RegistroGeneracion(neat.reporting.BaseReporter):
 # Modos
 # =====================================================================
 
+def ruta_config_entorno(args, carpeta=None):
+    """Configuración del entorno (calibración de la P1) que se usa.
+
+    --config manda si se da. Si no, con carpeta se usa su copia
+    p1_config.json: un genoma se reanuda y se reevalúa con la observación con
+    la que evolucionó (s0 y s0_quieto, sin POSX_SIGNO; CAMBIOS 35 y 41).
+    """
+    if args.config:
+        return args.config
+    copia = os.path.join(carpeta, 'p1_config.json') if carpeta else None
+    return copia if copia and os.path.exists(copia) else RUTA_CONFIG
+
+
 def preparar_contexto(args, carpeta=None):
     p2 = cargar_config_p2(os.path.join(carpeta, 'p2_config.json') if carpeta
                           else args.config_p2)
@@ -320,12 +332,14 @@ def preparar_contexto(args, carpeta=None):
         p2['DURACION_EVAL_S'] = args.duracion
     if args.calidad:
         p2['CALIDAD'] = args.calidad
-    c_env = cargar_config(args.config)
+    ruta_env = ruta_config_entorno(args, carpeta)
+    print(f'Configuración del entorno: {ruta_env}')
+    c_env = cargar_config(ruta_env)
     # Sin truncado del entorno: el fin lo deciden los criterios del anexo B.
     # ENTORNO: ajustes de la P2 sobre la configuración de la P1 (OBS_MEMORIA).
     # Con carpeta, los de la copia de la evolución: s0 no tiene el bloque y
     # sigue con 3 entradas.
-    env = RoboboSeguidorEnv(pasos_max=10**9, usar_simulador=True, ruta_config=args.config,
+    env = RoboboSeguidorEnv(pasos_max=10**9, usar_simulador=True, ruta_config=ruta_env,
                             ajustes=p2.get('ENTORNO'))
     CTX.update(env=env, verdad=VerdadTerreno(c_env['SIM_IP']), p2=p2,
                calidad=p2['CALIDADES'][p2['CALIDAD']], guia=args.guia,
@@ -370,7 +384,11 @@ def estimar_coste(config_neat, p2, generaciones, t_reinicio=3.0):
 def preparar_carpeta(args):
     carpeta = os.path.join(RUTA_EVOL, args.nombre)
     if os.path.exists(os.path.join(carpeta, 'evolucion.csv')) and not args.forzar:
-        raise SystemExit(f'{carpeta} ya tiene una evolución. Usa --reanudar o --forzar.')
+        if not glob.glob(os.path.join(carpeta, 'chk', 'p2-*')):
+            raise SystemExit(f'{carpeta} ya existe, pero sin ninguna generación terminada. '
+                             'Usa otro --nombre, o --forzar para borrarla y empezar de nuevo.')
+        raise SystemExit(f'{carpeta} ya tiene una evolución. Usa --reanudar, otro --nombre '
+                         'o --forzar (la borra).')
     if args.forzar and os.path.isdir(carpeta):
         shutil.rmtree(carpeta)
     os.makedirs(os.path.join(carpeta, 'chk'), exist_ok=True)
@@ -387,14 +405,15 @@ def preparar_carpeta(args):
         p2['CALIDAD'] = args.calidad
     with open(os.path.join(carpeta, 'p2_config.json'), 'w', encoding='utf-8') as f:
         json.dump(p2, f, indent=2, ensure_ascii=False)
-    shutil.copy(args.config, os.path.join(carpeta, 'p1_config.json'))
+    shutil.copy(ruta_config_entorno(args), os.path.join(carpeta, 'p1_config.json'))
     return carpeta
 
 
 def ultimo_checkpoint(carpeta):
     chks = glob.glob(os.path.join(carpeta, 'chk', 'p2-*'))
     if not chks:
-        raise SystemExit(f'No hay puntos de control en {carpeta}/chk.')
+        raise SystemExit(f'No hay puntos de control en {carpeta}/chk: la evolución no llegó a '
+                         'terminar ninguna generación. Empieza otra con --evolucionar.')
     return max(chks, key=lambda r: int(r.rsplit('-', 1)[1]))
 
 
@@ -443,6 +462,12 @@ def modo_reanudar(args):
     nueva = (cargar_config_neat(os.path.join(carpeta, 'p2_neat.ini'))
              if args.nueva_config else None)
     poblacion = neat.Checkpointer.restore_checkpoint(chk, new_config=nueva)
+    # NEAT-Python 2.0 restaura el estado de random y, a continuación, el
+    # constructor de Population hace random.seed(config.seed) porque el .ini
+    # tiene seed: al reanudar, las mutaciones volvían a empezar desde la
+    # semilla. Se vuelve a poner el estado guardado en el punto de control.
+    with gzip.open(chk) as f:
+        random.setstate(pickle.load(f)[4])
     env, _, p2 = preparar_contexto(args, carpeta)
     try:
         comprobar_dimensiones(env, poblacion.config)
@@ -516,6 +541,10 @@ def modo_reevaluar(args):
             candidatos.append((ruta, genoma))
         if len(candidatos) == args.candidatos:
             break
+    # Se comprueba antes de conectar con el simulador.
+    if not candidatos:
+        raise SystemExit(f'{carpeta} no tiene ninguna generación terminada: no hay '
+                         'genomas que reevaluar.')
 
     env, _, p2 = preparar_contexto(args, carpeta)
     p2['AGREGACION'] = 'media'      # para elegir, la media de varios episodios
@@ -558,7 +587,7 @@ def main():
     a.add_argument('--generaciones', type=int, default=15)
     a.add_argument('--guia', choices=GUIAS, required=True,
                    help='configuración del guía puesta en RoboboSim (sólo se anota)')
-    a.add_argument('--calidad', choices=['A', 'B', 'C', 'A0'], default=None,
+    a.add_argument('--calidad', choices=['A', 'B', 'C'], default=None,
                    help='formulación de la calidad (por defecto, la de p2_config.json)')
     a.add_argument('--duracion', type=float, default=None,
                    help='segundos por episodio de evaluación (por defecto, DURACION_EVAL_S)')
@@ -574,7 +603,9 @@ def main():
     a.add_argument('--nueva-config', action='store_true',
                    help='--reanudar con el p2_neat.ini de la carpeta, no el del punto de control')
     a.add_argument('--neat', default=RUTA_NEAT_INI)
-    a.add_argument('--config', default=RUTA_CONFIG, help='configuración del entorno (P1)')
+    a.add_argument('--config', default=None,
+                   help='configuración del entorno (P1). Por defecto, la copia de '
+                        'p2_evol/<nombre>/ al reanudar o reevaluar, y si no config/p1_config.json')
     a.add_argument('--config-p2', default=RUTA_CONFIG_P2)
     args = a.parse_args()
 

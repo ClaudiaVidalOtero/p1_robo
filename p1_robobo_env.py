@@ -157,8 +157,7 @@ def cargar_config(ruta=RUTA_CONFIG):
     return c
 
 
-def importar_calibracion(json_cal=RUTA_CALIBRACION, ruta_config=RUTA_CONFIG,
-                         guardar=True):
+def importar_calibracion(json_cal=RUTA_CALIBRACION, ruta_config=RUTA_CONFIG):
     """Deriva las constantes del entorno a partir de calibracion.json.
 
     Ajusta la ley size ≈ K / d² con las medidas de d >= 0,25 m (más cerca la
@@ -234,10 +233,9 @@ def importar_calibracion(json_cal=RUTA_CALIBRACION, ruta_config=RUTA_CONFIG,
     print(f'  SIZE_MAX = {c["SIZE_MAX"]:.0f}   banda = [{c["SIZE_BANDA_MIN"]:.1f}, '
           f'{c["SIZE_BANDA_MAX"]:.1f}]   choque = {c["SIZE_CHOQUE"]:.1f}')
 
-    if guardar:
-        with open(ruta_config, 'w', encoding='utf-8') as f:
-            json.dump(c, f, indent=2, ensure_ascii=False)
-        print(f'Configuración escrita en {ruta_config}')
+    with open(ruta_config, 'w', encoding='utf-8') as f:
+        json.dump(c, f, indent=2, ensure_ascii=False)
+    print(f'Configuración escrita en {ruta_config}')
     return c
 
 

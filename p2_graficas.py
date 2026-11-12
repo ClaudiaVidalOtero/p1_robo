@@ -216,15 +216,18 @@ def figura_causas(ev, salida):
     ruta = os.path.join(ev['carpeta'], 'episodios.csv')
     if not os.path.exists(ruta):
         return False
-    filas = leer_csv(ruta)
-    gens = sorted({int(f['generacion']) for f in filas})
+    # Desenlaces agrupados por generación en una sola pasada.
+    por_gen = {}
+    for f in leer_csv(ruta):
+        por_gen.setdefault(int(f['generacion']), []).append(f['desenlace'])
+    gens = sorted(por_gen)
     # Causas del anexo B más 'sin_arrancar', propia de la calidad de la P2.
     causas = CAUSAS[:-1] + ['sin_arrancar', 'otra']
     etiquetas = {**ETIQUETA_CAUSA, 'sin_arrancar': 'el guía no arranca'}
     colores = {**COLOR_CAUSA, 'sin_arrancar': '#8e24aa'}
     frac = {c: np.zeros(len(gens)) for c in causas}
     for i, g in enumerate(gens):
-        de_g = [f['desenlace'] for f in filas if int(f['generacion']) == g]
+        de_g = por_gen[g]
         for d in de_g:
             frac[d if d in frac else 'otra'][i] += 1.0 / len(de_g)
     fig, ax = plt.subplots(figsize=(8, 3.5))
@@ -378,8 +381,12 @@ def paradas_episodio(pasos):
     Parada: tramo con velocidad del guía < V_PARADA durante más de
     T_PARADA_MIN. Superada: el seguidor se detiene (velocidad mínima durante
     la parada < V_SEGUIDOR_PARADO), sin colisión, y no falla en los
-    T_TRAS_PARADA s siguientes a que el guía reanude la marcha. Una parada
-    que dura hasta el final del episodio no se puede juzgar ('sin_reanudar').
+    T_TRAS_PARADA s siguientes a que el guía reanude la marcha.
+    Fallida: no se detiene, o el episodio acaba en fallo durante la parada o
+    antes de T_TRAS_PARADA s tras reanudar (un choque contra el guía parado
+    corta el episodio con el guía aún quieto: es fallida, no "sin reanudar").
+    No juzgable: el episodio acaba sin fallo (120 s) o sin desenlace antes de
+    poder comprobar los T_TRAS_PARADA s; cuenta como parada, no como superada.
     """
     t = np.array([float(f['t']) for f in pasos])
     if len(t) < 3:
@@ -389,6 +396,9 @@ def paradas_episodio(pasos):
     vs = _velocidad(t, np.array([float(f['seg_x_mm']) for f in pasos]),
                     np.array([float(f['seg_z_mm']) for f in pasos]))
     t_fin, desenlace = t[-1], pasos[-1]['desenlace']
+    # Cualquier desenlace distinto de completar es fallo (B.3: otra causa no
+    # cuenta como completado); sin desenlace, la evaluación se abortó.
+    fallo = desenlace not in ('completado', '')
     resultado, i = [], 0
     while i < len(vg):
         if vg[i] >= V_PARADA:
@@ -401,13 +411,15 @@ def paradas_episodio(pasos):
         if te - ts > T_PARADA_MIN:
             reanuda = j < len(vg)
             se_detiene = float(vs[i:j].min()) < V_SEGUIDOR_PARADO
-            sin_fallo = desenlace == 'completado' or t_fin >= te + T_TRAS_PARADA
-            if not reanuda:
-                estado = 'sin_reanudar'
-            elif se_detiene and sin_fallo:
+            visto_tras = t_fin >= te + T_TRAS_PARADA   # hay T s tras reanudar
+            if fallo and (not reanuda or not visto_tras):
+                estado = 'fallida'       # falla parado o antes de T s tras reanudar
+            elif not reanuda or not visto_tras:
+                estado = 'no_juzgable'   # acaba sin fallo antes de poder comprobarlo
+            elif se_detiene:
                 estado = 'superada'
             else:
-                estado = 'fallida'
+                estado = 'fallida'       # no se detiene detrás del guía
             resultado.append({'inicio_s': round(float(ts), 1), 'fin_s': round(float(te), 1),
                               'estado': estado})
         i = j
@@ -421,14 +433,14 @@ def metricas_paradas(filas):
     todas = [p for pasos in episodios.values() for p in paradas_episodio(pasos)]
     return {'paradas': len(todas),
             'superadas': sum(p['estado'] == 'superada' for p in todas),
-            'sin_reanudar': sum(p['estado'] == 'sin_reanudar' for p in todas),
+            'no_juzgables': sum(p['estado'] == 'no_juzgable' for p in todas),
             'detalle': todas}
 
 
 CABECERA = ['etiqueta', 'config', 'episodios', 'completados', 'pct_completados',
             'colision', 'perdido_distancia', 'perdido_sin_ver', 'otra',
             'pct_en_banda', 'separacion_media_m', 'desviacion_media_deg',
-            'pct_desv_bajo_15', 'paradas', 'paradas_superadas', 'paradas_sin_reanudar']
+            'pct_desv_bajo_15', 'paradas', 'paradas_superadas', 'paradas_no_juzgables']
 
 
 def fila_tabla(etiqueta, config, filas, paradas=None):
@@ -442,10 +454,10 @@ def fila_tabla(etiqueta, config, filas, paradas=None):
             'separacion_media_m': round(m['separacion_media_m'], 3),
             'desviacion_media_deg': round(m['desviacion_media_deg'], 1),
             'pct_desv_bajo_15': round(m['pct_desv_bajo_umbral'], 1),
-            'paradas': '', 'paradas_superadas': '', 'paradas_sin_reanudar': ''}
+            'paradas': '', 'paradas_superadas': '', 'paradas_no_juzgables': ''}
     if paradas is not None:
         fila.update(paradas=paradas['paradas'], paradas_superadas=paradas['superadas'],
-                    paradas_sin_reanudar=paradas['sin_reanudar'])
+                    paradas_no_juzgables=paradas['no_juzgables'])
     return fila
 
 
@@ -475,7 +487,7 @@ def modo_anexo_b(etiquetas, dir_salida):
           '|---|---|---|---|---|---|---|---|---|---|---|---|']
     for r in tabla:
         par = (f'{r["paradas_superadas"]}/{r["paradas"]}'
-               + (f' ({r["paradas_sin_reanudar"]} sin reanudar)' if r['paradas_sin_reanudar'] else '')
+               + (f' ({r["paradas_no_juzgables"]} no juzgables)' if r['paradas_no_juzgables'] else '')
                if r['paradas'] != '' else '—')
         md.append(f'| {r["etiqueta"]} | {r["config"]} | {r["completados"]}/{r["episodios"]} '
                   f'({r["pct_completados"]} %) | {r["colision"]} | {r["perdido_distancia"]} | '
@@ -485,7 +497,9 @@ def modo_anexo_b(etiquetas, dir_salida):
     md += ['', 'Banda 0,20-0,45 m; colisión < 0,12 m; guía perdido > 0,90 m o > 3 s sin ver; '
            f'parada del guía: < {V_PARADA} m/s durante > {T_PARADA_MIN} s; superada: el '
            f'seguidor baja de {V_SEGUIDOR_PARADO} m/s sin colisión y no falla en los '
-           f'{T_TRAS_PARADA:.0f} s siguientes a que el guía reanude.']
+           f'{T_TRAS_PARADA:.0f} s siguientes a que el guía reanude; fallida si choca o pierde '
+           'al guía durante la parada o en esos segundos; no juzgable si el episodio acaba '
+           'sin fallo antes de poder comprobarlo.']
     with open(os.path.join(dir_salida, 'tabla_anexo_b_p2.md'), 'w', encoding='utf-8') as f:
         f.write('\n'.join(md) + '\n')
     print('\n'.join(md))

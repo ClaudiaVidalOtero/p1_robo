@@ -155,7 +155,10 @@ def main():
     a.add_argument('--etiqueta', default=None)
     a.add_argument('--configs', nargs='+', choices=sorted(CONFIGURACIONES),
                    default=sorted(CONFIGURACIONES))
-    a.add_argument('--config', default=RUTA_CONFIG, help='configuración del entorno (P1)')
+    a.add_argument('--config', default=None,
+                   help='configuración del entorno (P1). Por defecto, con --neat la '
+                        'p1_config.json de la carpeta del genoma y si no config/p1_config.json. '
+                        'En el robot real, la calibración del robot real')
     a.add_argument('--config-p2', default=RUTA_CONFIG_P2)
     a.add_argument('--detalle', action='store_true', help='una línea por paso')
     a.add_argument('--busqueda', action='store_true',
@@ -166,6 +169,15 @@ def main():
                    help='episodios por configuración (por defecto, los del anexo B)')
     args = a.parse_args()
 
+    # Un genoma se evalúa con la calibración con la que evolucionó (la copia de
+    # su carpeta): s0 y s0_quieto se evolucionaron sin POSX_SIGNO (CAMBIOS 35).
+    if args.config is None:
+        copia = os.path.join(os.path.dirname(args.neat), 'p1_config.json') if args.neat else None
+        args.config = copia if copia and os.path.exists(copia) else RUTA_CONFIG
+    if args.real and args.config == RUTA_CONFIG:
+        print(f'AVISO: --real con {RUTA_CONFIG}, la calibración del simulador. '
+              'Pasa con --config la del robot real (apartado 6.6).')
+    print(f'Configuración del entorno: {args.config}')
     c_env = cargar_config(args.config)
     # Una red de NEAT se evalúa con la observación con la que evolucionó: el
     # bloque ENTORNO (OBS_MEMORIA) de la p2_config.json de su carpeta. La

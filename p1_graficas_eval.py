@@ -478,11 +478,11 @@ def figura_desenlaces(datos, dir_salida):
                              squeeze=False)
     for ax, et in zip(ejes[0], etiquetas):
         configs = [c for c in ORDEN_CONFIG if c in datos[et]]
+        # Desenlaces de cada configuración calculados una sola vez (no por causa).
+        desenlaces = [metricas(datos[et][c])['desenlaces'] for c in configs]
         base = np.zeros(len(configs))
         for causa in CAUSAS:
-            vals = np.array([
-                metricas(datos[et][c])['desenlaces'].get(causa, 0)
-                for c in configs], dtype=float)
+            vals = np.array([d.get(causa, 0) for d in desenlaces], dtype=float)
             if vals.sum() == 0:
                 continue
             ax.bar(configs, vals, bottom=base, color=COLOR_CAUSA[causa],

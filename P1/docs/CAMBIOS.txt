@@ -1187,3 +1187,88 @@ Decisiones del equipo (2026-10-28):
   - Efecto: comprobado sin simulador con puntos_paso (valores de arriba) y
             --help. PENDIENTE: s4 con C (desviación media de los episodios,
             uso de posx en los pesos de los mejores, completados).
+
+
+-----------------------------------------------------------------
+[2026-11-12] 40. Eliminado código muerto
+-----------------------------------------------------------------
+  - Qué:    * p2_neat.py: puntos_paso sólo aplica banda·(W_BANDA + W_DESV·alin);
+              se quita la rama de la alineación sumada (calidad A0) y los
+              valores por defecto de K_FUERA y ALIN_POR_BANDA. --calidad ya
+              no admite A0.
+            * config/p2_config.json: fuera el bloque A0 y la clave
+              ALIN_POR_BANDA de A, B y C (siempre true).
+            * p1_robobo_env.py: importar_calibracion pierde el parámetro
+              guardar (nadie lo llamaba con False); siempre escribe la config.
+  - Por qué: ninguna evolución de p2_evol/ usa A0 y todas sus copias de
+            p2_config.json tienen ALIN_POR_BANDA = true, así que la rama no
+            se ejecutaba. A0 sigue documentada en el cambio 30 (fórmula y
+            tabla de casos) y en p2_evol/referencias_posx_reflejada.csv.
+  - Efecto: ninguno en los resultados: s0-s4 se reanudan y reevalúan igual
+            (sus copias de configuración no se tocan; la clave
+            ALIN_POR_BANDA que llevan se ignora).
+
+
+-----------------------------------------------------------------
+[2026-11-12] 41. Revisión frente al enunciado: paradas de C4, reanudación y calibración por carpeta
+-----------------------------------------------------------------
+  - Qué:    * p2_graficas.paradas_episodio (métrica B.4): un episodio que
+              acaba en fallo con el guía parado (p. ej. choque contra él)
+              cuenta como parada 'fallida'; antes salía 'sin_reanudar' y no
+              penalizaba. Nuevo estado 'no_juzgable' (columna
+              paradas_no_juzgables): el episodio acaba sin fallo antes de que
+              pasen los 10 s tras reanudar (o con el guía aún parado). Antes,
+              completar los 120 s a 4 s de reanudar contaba como 'superada'.
+              Cualquier desenlace distinto de 'completado' es fallo (B.3).
+            * p2_neat.modo_reanudar: tras restore_checkpoint se vuelve a
+              poner el estado de random guardado en el punto de control.
+            * p2_neat.py y p2_evaluar.py: --config por defecto None. Con una
+              carpeta (--reanudar, --reevaluar) o un genoma (--neat) se usa su
+              copia p1_config.json; si no, config/p1_config.json. p2_evaluar
+              avisa si --real se lanza con la calibración del simulador.
+            * README: comandos de la P1 desde P1/ con PYTHONPATH=.. (tras la
+              refactorización, los de la raíz no encontraban los scripts).
+  - Por qué: * B.4: "superada: el seguidor se detiene sin colisión y sigue sin
+              fallo 10 s después de que el guía reanude la marcha".
+            * NEAT-Python 2.0 (checkpoint.py/population.py): restore_checkpoint
+              hace random.setstate y después Population() hace
+              random.seed(config.seed) porque el .ini tiene seed. Cada
+              reanudación reiniciaba las mutaciones desde la semilla.
+              Comprobado con 4 generaciones de prueba: seguida 243,71;
+              reanudada desde p2-2 sin arreglo 292,34, con arreglo 243,71.
+            * s0 y s0_quieto evolucionaron sin POSX_SIGNO (copia sin la clave
+              = 1); reevaluarlas o pasarlas por el anexo B con
+              config/p1_config.json (POSX_SIGNO = -1) invertía su posx.
+  - Efecto: las tablas del anexo B de C4 hay que regenerarlas (p2_graficas.py
+            --anexo-b). Las reanudaciones ya hechas (s1, s2) siguieron otro
+            camino aleatorio que el de una evolución sin cortar: siguen siendo
+            válidas y reproducibles desde su punto de control, pero se
+            declara. Comprobado sin simulador: 6 casos sintéticos de parada
+            (superada, choque parado, no frena, falla a 4 s, acaba parado,
+            acaba a 4 s) dan superada/fallida/fallida/fallida/no_juzgable/
+            no_juzgable.
+
+
+-----------------------------------------------------------------
+[2026-11-12] 42. Eficiencia de las gráficas
+-----------------------------------------------------------------
+  - Qué:    p1_graficas_eval.figura_desenlaces calcula las métricas de cada
+            configuración una vez (antes, una vez por causa: 5 veces).
+            p2_graficas.figura_causas agrupa episodios.csv por generación en
+            una pasada (antes recorría todas las filas en cada generación).
+  - Por qué: revisión de eficiencia. El resto del coste es tiempo real del
+            simulador (paso de control, reinicios), que no depende del código.
+  - Efecto: mismas figuras; comprobado figura_causas con p2_evol/s4.
+
+
+-----------------------------------------------------------------
+[2026-11-12] 43. Mensajes claros con una evolución sin generaciones terminadas
+-----------------------------------------------------------------
+  - Qué:    p2_neat.py: --evolucionar, --reanudar y --reevaluar sobre una
+            carpeta sin ningún punto de control explican qué pasa y qué
+            hacer; --reevaluar lo comprueba antes de conectar con el
+            simulador (antes: IndexError en resultados[0] y un
+            reevaluacion.csv vacío, que se ha borrado de p2_evol/s4).
+  - Por qué: p2_evol/s4 (de la compañera) se paró en la generación 0 tras 2
+            episodios: tiene evolucion.csv sólo con la cabecera y ni chk/ ni
+            genomas/.

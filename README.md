@@ -6,29 +6,29 @@ leídos por ROS 2.
 
 ## Estructura
 
+Los módulos compartidos con la P2 están en la raíz; lo exclusivo de la P1
+(scripts de calibración y entrenamiento, modelos, registros, documentación)
+está en `P1/`.
+
 ```
 p1_robobo_env.py     Entorno Gymnasium (observación, acción, recompensa, reinicio)
-p1_calibrar.py       Caracterización del sensor (apartado 5.1)
-p1_entrenar.py       Entrenamiento SB3, línea base aleatoria y curvas de aprendizaje
 p1_evaluar.py        Evaluador del anexo B (verdad del terreno solo aquí; escribe los CSV)
 p1_graficas_eval.py  Métricas, tablas y figuras del anexo B desde los CSV de evaluación
+config/p1_config.json  Configuración activa, la que usa la P2 (con POSX_SIGNO, CAMBIOS 35)
 
-config/
-  p1_config.json                    Configuración activa (constantes calibradas + recompensa)
-  p1_config_ppo_s0.json             Configuración con la que se entrenó ppo_s0
-  calibracion.json                  Medidas crudas de p1_calibrar.py
-  calibracion_invalida_2026-10-14.json  Calibración descartada (ver docs/CAMBIOS.txt)
-modelos/             Políticas entrenadas: p1_modelo_<algoritmo>_s<semilla>.zip
-docs/
-  CAMBIOS.txt        Registro de cambios (qué / dónde / por qué / efecto)
-  memoria.txt        Notas de trabajo para la memoria
-  RIA_P1_enunciado.pdf
-
-p1_logs/             (se genera) CSV de Monitor, registros por paso y de evaluación
-p1_checkpoints/      (se genera) checkpoints durante el entrenamiento
+P1/
+  p1_calibrar.py     Caracterización del sensor (apartado 5.1)
+  p1_entrenar.py     Entrenamiento SB3, línea base aleatoria y curvas de aprendizaje
+  config/            p1_config.json y calibracion.json con los que se entregó la P1
+  modelos/           Políticas entrenadas: p1_modelo_<algoritmo>_s<semilla>.zip
+  docs/              CAMBIOS.txt (registro de cambios de P1 y P2), memoria.txt, enunciado
+  p1_logs/           CSV de Monitor, registros por paso y de evaluación
+  p1_graficas/       Figuras y tablas de la P1
 ```
 
-Todos los scripts se lanzan **desde esta carpeta** (las rutas son relativas).
+Las rutas son relativas al directorio de trabajo. Los comandos de la P1 se
+lanzan **desde `P1/`** con la raíz en `PYTHONPATH` (así usan `P1/config`,
+`P1/modelos` y `P1/p1_logs`); los de la P2, desde la raíz.
 
 ## Requisitos
 
@@ -44,6 +44,9 @@ ros2 run robobo_ros2 robobo_container --ros-args \
 ## Reproducción
 
 ```bash
+cd P1
+export PYTHONPATH=..
+
 # 1. Calibración del sensor y volcado a config/p1_config.json
 python3 p1_calibrar.py --distancia 0.375
 python3 p1_entrenar.py --importar-calibracion
@@ -62,22 +65,20 @@ python3 p1_entrenar.py --entrenar --algoritmo sac --pasos 20000 --semilla 0
 python3 p1_entrenar.py --graficas --grupos sac_s --ventana 10
 
 # 6. Evaluación anexo B -> p1_logs/eval_<etiqueta>_<C>.csv
-python3 p1_evaluar.py --algoritmo sac --semilla 0
-python3 p1_evaluar.py --algoritmo aleatorio
+python3 ../p1_evaluar.py --algoritmo sac --semilla 0
+python3 ../p1_evaluar.py --algoritmo aleatorio
 
 # 7. Métricas, tablas y figuras del anexo B a partir de los CSV de evaluación
-python3 p1_graficas_eval.py                    # todo p1_logs salvo 'aleatorio'
-python3 p1_graficas_eval.py --etiquetas sac_s0 # sólo una política
-python3 p1_graficas_eval.py --final C1=sac_s1 C2=sac_s2 C3=sac_s1
-python3 p1_graficas_eval.py --solo-tablas      # sin matplotlib
+python3 ../p1_graficas_eval.py                    # todo p1_logs salvo 'aleatorio'
+python3 ../p1_graficas_eval.py --etiquetas sac_s0 # sólo una política
+python3 ../p1_graficas_eval.py --final C1=sac_s1 C2=sac_s2 C3=sac_s1
+python3 ../p1_graficas_eval.py --solo-tablas      # sin matplotlib
 ```
 
-Para evaluar un modelo entrenado con otra configuración, pasar la suya:
-
-```bash
-python3 p1_evaluar.py --algoritmo ppo --modelo modelos/p1_modelo_ppo_s0.zip \
-    --config config/p1_config_ppo_s0.json
-```
+Con la versión actual del contenedor la x del blob sale reflejada (CAMBIOS
+35): para volver a ejecutar hoy las políticas de la P1 hay que usar
+`--config ../config/p1_config.json` (POSX_SIGNO = -1), que es lo que hace
+`p2_evaluar.py --sb3` en la comparación con la P2.
 
 ---
 
@@ -120,7 +121,7 @@ python3 p2_neat.py --reevaluar --nombre s0 --candidatos 5 --episodios 3 --guia C
 
 # Anexo B (C1-C4) y comparación con la P1
 python3 p2_evaluar.py --neat p2_evol/s0/mejor_genoma.pkl --etiqueta neat_s0
-python3 p2_evaluar.py --sb3 sac --modelo modelos/p1_modelo_sac_s0.zip --configs C1 C2 C3
+python3 p2_evaluar.py --sb3 sac --modelo P1/modelos/p1_modelo_sac_s0.zip --configs C1 C2 C3
 python3 p2_evaluar.py --reto
 python3 p2_evaluar.py --aleatorio
 
