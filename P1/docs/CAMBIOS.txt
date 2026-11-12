@@ -1272,3 +1272,23 @@ Decisiones del equipo (2026-10-28):
   - Por qué: p2_evol/s4 (de la compañera) se paró en la generación 0 tras 2
             episodios: tiene evolucion.csv sólo con la cabecera y ni chk/ ni
             genomas/.
+
+
+-----------------------------------------------------------------
+[2026-11-12] 45. Giro máximo 0,3 rad/s en la P2 (s8, rama s8-wmax)
+-----------------------------------------------------------------
+  - Qué:    config/p2_config.json, bloque ENTORNO: W_MAX = 0,3 rad/s (la
+            P1 y s0-s7 usan 0,5 de p1_config.json, que no cambia). Todo lo
+            demás igual que s6 (calidad C, 30 s, 3 episodios, pop 30), para
+            que s8 frente a s6 mida sólo el efecto de W_MAX. La calidad D
+            (CAMBIOS 44, s7, rama main) prueba por separado la penalización.
+  - Por qué: anexo B de s6 (genoma 99, elegido en la reevaluación en C3):
+            0/5, todos perdido_sin_ver a los 8,7-20,5 s, con el guía en
+            recta y la separación en banda (0,25-0,40 m). La red gira a
+            tope de un lado a otro (|a1| > 0,8 en el 43-67 % de los pasos
+            con la pelota a la vista); un golpe de giro saca la pelota de
+            la cámara (desviación de 2° a 30° en un paso) y, sin pelota y
+            con posx_ult casi centrado, no la busca.
+  - Riesgo: con 0,3 rad/s puede no girar lo bastante en las curvas a
+            velocidad 40; comprobar antes con --reto en C3.
+  - Efecto: PENDIENTE (s8).

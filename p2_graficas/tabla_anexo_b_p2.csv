@@ -1,0 +1,6 @@
+etiqueta,config,episodios,completados,pct_completados,colision,perdido_distancia,perdido_sin_ver,otra,pct_en_banda,separacion_media_m,desviacion_media_deg,pct_desv_bajo_15,paradas,paradas_superadas,paradas_no_juzgables
+neat_s6_C3,C1,1,0,0.0,0,0,1,0,93.3,0.353,32.8,50.0,,,
+neat_s6_C3,C2,1,0,0.0,0,0,1,0,43.6,0.466,29.7,53.8,,,
+neat_s6_C3,C3,1,0,0.0,0,0,1,0,63.0,0.375,19.0,40.7,,,
+neat_s6_C3,C4,2,0,0.0,0,0,2,0,70.3,0.379,26.9,52.7,3,0,0
+neat_s6_C3,TOTAL,5,0,0.0,0,0,5,0,67.1,0.394,27.3,50.6,,,
