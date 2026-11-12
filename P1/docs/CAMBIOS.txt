@@ -1287,3 +1287,20 @@ Decisiones del equipo (2026-10-28):
             completado de 1.800. C no castiga el fallo: chocar o perder
             al guía sólo deja de sumar.
   - Efecto: PENDIENTE (s7).
+
+
+-----------------------------------------------------------------
+[2026-11-12] 45. Calidad D: P_SIN_ARRANCAR de 10 a 30 (desde s9)
+-----------------------------------------------------------------
+  - Qué:    config/p2_config.json, calidad D: P_SIN_ARRANCAR 10 -> 30.
+            s9: calidad D con episodios de 30 s (--duracion 30), semilla 2.
+  - Por qué: s7 (D, 60 s) explotó la calidad: no acercarse al guía (que
+            entonces no arranca) acababa el episodio a los 10 s con -10,
+            mientras que intentarlo y fallar daba -20 más lo sumado. El
+            mejor de cada generación sacó exactamente -10 en las 10
+            primeras generaciones y los episodios sin_arrancar pasaron de
+            6 a 48 de 90 (banda del 21 % al 3 %). Con 30, no arrancar es
+            peor que cualquier fallo (>= -20), así que intentarlo siempre
+            compensa. Es el atajo "detenerse si eso evita el fallo" del
+            ap. 7 del enunciado.
+  - Efecto: PENDIENTE (s9).
