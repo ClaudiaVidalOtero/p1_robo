@@ -56,6 +56,19 @@
       "T_ARRANQUE_MAX_S": 10.0,
       "P_SIN_ARRANCAR": 30.0,
       "SOLO_TRAS_ARRANQUE": true
+    },
+    "E": {
+      "_descripcion": "como C (sin penalizacion por fallo) mas una penalizacion por paso a los cambios bruscos de giro con la pelota a la vista: resta W_SUAVE*|a1 - a1_anterior|/2 (CAMBIOS 47). En el anexo B de s6 el giro estaba saturado en el 43-67 % de los pasos y un golpe de giro sacaba la pelota de la camara en recta. Depende solo de la accion, que el robot conoce",
+      "W_BANDA": 0.25,
+      "W_DESV": 1.0,
+      "DESV_MAX_DEG": 60.0,
+      "K_FUERA": 0.3,
+      "W_SUAVE": 0.5,
+      "P_COLISION": 0.0,
+      "P_PERDIDO": 0.0,
+      "T_ARRANQUE_MAX_S": 10.0,
+      "P_SIN_ARRANCAR": 10.0,
+      "SOLO_TRAS_ARRANQUE": true
     }
   },
   "RETO": {
