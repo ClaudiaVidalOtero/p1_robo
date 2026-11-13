@@ -1292,3 +1292,28 @@ Decisiones del equipo (2026-10-28):
   - Riesgo: con 0,3 rad/s puede no girar lo bastante en las curvas a
             velocidad 40; comprobar antes con --reto en C3.
   - Efecto: PENDIENTE (s8).
+
+
+-----------------------------------------------------------------
+[2026-11-13] 48. Memoria de la P2 y figuras (rama s14-c1)
+-----------------------------------------------------------------
+  - Qué:    * docs/Memoria_P2.docx y .pdf: memoria de la P2 (cuerpo de 6
+              páginas + anexos A-C), con huecos marcados entre corchetes
+              para s12/s13, la comparación con SAC en la misma sesión y la
+              transferencia real.
+            * p2_graficas/memoria/: figuras generadas con p2_graficas.py
+              (--evol s6 s8 s11 s14, --red de los genomas 243 y 627) y
+              fig_redes_243_627.png, las dos redes en una sola imagen.
+            * p2_graficas/memoria/formatear_memoria.ps1: da el formato del
+              enunciado (ap. 9.1) a la exportación en Word con Word COM: A4,
+              márgenes 2,5 cm, Calibri 11, interlineado sencillo, justificado,
+              ecuación de Word para la calidad, figuras a 14 cm, tablas
+              ajustadas y anexos en página nueva; cuenta las páginas del
+              cuerpo y guarda .docx y .pdf.
+  - Por qué: la exportación salía en tamaño carta, interlineado 1,08, sin
+            justificar y con la fórmula como código LaTeX.
+  - Uso:    powershell -ExecutionPolicy Bypass -File
+            p2_graficas\memoria\formatear_memoria.ps1 -Origen <docx exportado>
+            -Destino docs\Memoria_P2.docx -Pdf docs\Memoria_P2.pdf
+  - Nota:   número 48 para no chocar con el 45 de main (calidad D) ni con
+            el 46 y el 47 de las ramas calidad-e y s10-e-con-s8.

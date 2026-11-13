@@ -1,0 +1,15 @@
+Genoma 243: 2 nodos (sin entradas), 8 conexiones activas, calidad 61.92114040392311
+
+Nodos (activación, sesgo):
+   avance a0: tanh, sesgo +1.011
+     giro a1: tanh, sesgo -0.191
+
+Conexiones activas (origen -> destino: peso):
+        posx -> giro a1   : -1.826
+        posy -> avance a0 : -1.282
+        size -> giro a1   : -1.219
+        posy -> giro a1   : +0.727
+        size -> avance a0 : -0.519
+    posx_ult -> giro a1   : +0.146
+    posx_ult -> avance a0 : -0.050
+        posx -> avance a0 : +0.023
