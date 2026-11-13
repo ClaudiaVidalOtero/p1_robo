@@ -1317,3 +1317,28 @@ Decisiones del equipo (2026-10-28):
             -Destino docs\Memoria_P2.docx -Pdf docs\Memoria_P2.pdf
   - Nota:   número 48 para no chocar con el 45 de main (calidad D) ni con
             el 46 y el 47 de las ramas calidad-e y s10-e-con-s8.
+
+
+-----------------------------------------------------------------
+[2026-11-13] 49. Config con el signo de posx de la P1 para SAC y el reto
+-----------------------------------------------------------------
+  - Qué:    config/p1_config_posx_p1.json: copia de config/p1_config.json
+            con POSX_SIGNO = 1. Se pasa con --config a p2_evaluar.py para
+            la política de la P1 (--sb3) y para el reto (--reto).
+  - Por qué: SAC s0 (P1) en el anexo B de la P2 (13/11, C1) perdió la pelota
+            a los 5,2 s girando hacia el lado contrario. Correlación entre la
+            posx observada y la desviación del evaluador (pasos con la
+            pelota a la vista): P1 (eval_sac_s0_C1) r = -0,95; todos los
+            anexos B de la P2 desde el 12/11 (s6, s8, s11, s14, reto,
+            aleatorio, SAC) r = +0,68 a +0,99. Con POSX_SIGNO = -1 la
+            observación sale con el convenio contrario al de la P1, al revés
+            de lo que se comprobó en CAMBIOS 35 (11/11).
+  - Efecto: las redes de NEAT no cambian: evolucionaron y se evalúan con la
+            copia de su carpeta (-1), con el mismo convenio. Hay que repetir
+            con este config la política de la P1 (comparación 6.5) y el reto
+            de la línea base (eval_reto_*, 0/5 a los 5-6 s girando al revés).
+  - Hecho (13/11): SAC s0 completa C1, C2 y C3 (r = -0,96). Reto: sigue
+            0/5 pero aguanta hasta 86 s (choca al ver la pelota cortada de
+            cerca); su calidad C en C3 pasa de 4,6 a 88,0. La referencia
+            antigua (4,6) se mueve de p2_evol/referencias.csv a
+            p2_evol/referencias_posx_invertida_p2.csv.
