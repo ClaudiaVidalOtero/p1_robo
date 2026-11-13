@@ -1304,3 +1304,72 @@ Decisiones del equipo (2026-10-28):
             compensa. Es el atajo "detenerse si eso evita el fallo" del
             ap. 7 del enunciado.
   - Efecto: PENDIENTE (s9).
+
+
+-----------------------------------------------------------------
+[2026-11-12] 46. Giro máximo 0,3 rad/s en la P2 (s8, rama s8-wmax)
+-----------------------------------------------------------------
+  - Qué:    config/p2_config.json, bloque ENTORNO: W_MAX = 0,3 rad/s (la
+            P1 y s0-s7 usan 0,5 de p1_config.json, que no cambia). Todo lo
+            demás igual que s6 (calidad C, 30 s, 3 episodios, pop 30), para
+            que s8 frente a s6 mida sólo el efecto de W_MAX. La calidad D
+            (CAMBIOS 44, s7, rama main) prueba por separado la penalización.
+  - Por qué: anexo B de s6 (genoma 99, elegido en la reevaluación en C3):
+            0/5, todos perdido_sin_ver a los 8,7-20,5 s, con el guía en
+            recta y la separación en banda (0,25-0,40 m). La red gira a
+            tope de un lado a otro (|a1| > 0,8 en el 43-67 % de los pasos
+            con la pelota a la vista); un golpe de giro saca la pelota de
+            la cámara (desviación de 2° a 30° en un paso) y, sin pelota y
+            con posx_ult casi centrado, no la busca.
+  - Riesgo: con 0,3 rad/s puede no girar lo bastante en las curvas a
+            velocidad 40; comprobar antes con --reto en C3.
+  - Efecto: PENDIENTE (s8).
+
+
+-----------------------------------------------------------------
+[2026-11-13] 49. Memoria de la P2 y figuras (rama s14-c1)
+-----------------------------------------------------------------
+  - Qué:    * docs/Memoria_P2.docx y .pdf: memoria de la P2 (cuerpo de 6
+              páginas + anexos A-C), con huecos marcados entre corchetes
+              para s12/s13, la comparación con SAC en la misma sesión y la
+              transferencia real.
+            * p2_graficas/memoria/: figuras generadas con p2_graficas.py
+              (--evol s6 s8 s11 s14, --red de los genomas 243 y 627) y
+              fig_redes_243_627.png, las dos redes en una sola imagen.
+            * p2_graficas/memoria/formatear_memoria.ps1: da el formato del
+              enunciado (ap. 9.1) a la exportación en Word con Word COM: A4,
+              márgenes 2,5 cm, Calibri 11, interlineado sencillo, justificado,
+              ecuación de Word para la calidad, figuras a 14 cm, tablas
+              ajustadas y anexos en página nueva; cuenta las páginas del
+              cuerpo y guarda .docx y .pdf.
+  - Por qué: la exportación salía en tamaño carta, interlineado 1,08, sin
+            justificar y con la fórmula como código LaTeX.
+  - Uso:    powershell -ExecutionPolicy Bypass -File
+            p2_graficas\memoria\formatear_memoria.ps1 -Origen <docx exportado>
+            -Destino docs\Memoria_P2.docx -Pdf docs\Memoria_P2.pdf
+  - Nota:   numeradas de nuevo al juntar las ramas en entrega (CAMBIOS 51).
+
+
+-----------------------------------------------------------------
+[2026-11-13] 50. Config con el signo de posx de la P1 para SAC y el reto
+-----------------------------------------------------------------
+  - Qué:    config/p1_config_posx_p1.json: copia de config/p1_config.json
+            con POSX_SIGNO = 1. Se pasa con --config a p2_evaluar.py para
+            la política de la P1 (--sb3) y para el reto (--reto).
+  - Por qué: SAC s0 (P1) en el anexo B de la P2 (13/11, C1) perdió la pelota
+            a los 5,2 s girando hacia el lado contrario. Correlación entre la
+            posx observada y la desviación del evaluador (pasos con la
+            pelota a la vista): P1 (eval_sac_s0_C1) r = -0,95; todos los
+            anexos B de la P2 desde el 12/11 (s6, s8, s11, s14, reto,
+            aleatorio, SAC) r = +0,68 a +0,99. Con POSX_SIGNO = -1 la
+            observación sale con el convenio contrario al de la P1, al revés
+            de lo que se comprobó en CAMBIOS 35 (11/11).
+  - Efecto: las redes de NEAT no cambian: evolucionaron y se evalúan con la
+            copia de su carpeta (-1), con el mismo convenio. Hay que repetir
+            con este config la política de la P1 (comparación 6.5) y el reto
+            de la línea base (eval_reto_*, 0/5 a los 5-6 s girando al revés).
+  - Hecho (13/11): SAC s0 completa C1, C2 y C3 (r = -0,96). Reto: sigue
+            0/5 pero aguanta hasta 86 s (choca al ver la pelota cortada de
+            cerca); su calidad C en C3 pasa de 4,6 a 88,0. La referencia
+            antigua (4,6) se mueve de p2_evol/referencias.csv a
+            p2_evol/referencias_posx_invertida_p2.csv.

@@ -1,0 +1,14 @@
+Genoma 627: 2 nodos (sin entradas), 7 conexiones activas, calidad 95.38089648792045
+
+Nodos (activación, sesgo):
+   avance a0: tanh, sesgo +0.677
+     giro a1: tanh, sesgo -0.499
+
+Conexiones activas (origen -> destino: peso):
+        posx -> giro a1   : -2.039
+    posx_ult -> avance a0 : +1.972
+        posx -> avance a0 : -1.504
+        posy -> avance a0 : -1.162
+    posx_ult -> giro a1   : +1.029
+        posy -> giro a1   : +0.566
+        size -> giro a1   : -0.172
